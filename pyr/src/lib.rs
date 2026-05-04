@@ -4,7 +4,10 @@
 
 pub mod console;
 
-use pyr_arch::sysregs::current_el::CurrentEl;
+use pyr_arch::{
+    barrier::isb,
+    sysregs::{HcrEl2, SctlrEl2, current_el::CurrentEl},
+};
 
 #[cfg(feature = "platform-qemu-virt")]
 use pyr_platform_qemu::QemuVirt;
@@ -64,6 +67,19 @@ where
     let el = CurrentEl::mrs();
     log!("CurrentEL = {:#018x}", el.raw());
     log!("Exception level = EL{}", el.exception_level());
+
+    let hcr = HcrEl2::mrs();
+    let sctlr = SctlrEl2::mrs();
+
+    log!("HCR_EL2 = {:#018x}", hcr.raw());
+    log!("SCTLR_EL2 = {:#018x}", sctlr.raw());
+    log!("SCTLR_EL2.M = {}", sctlr.mmu_enabled());
+
+    HcrEl2::mrs().with_rw().msr();
+    isb();
+
+    log!("HCR_EL2 after RW = {:#018x}", HcrEl2::mrs().raw());
+
     loop {
         core::hint::spin_loop();
     }

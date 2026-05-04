@@ -5,3 +5,4 @@
 pub mod addr;
 pub mod platform;
 pub mod sysregs;
+pub mod barrier;
