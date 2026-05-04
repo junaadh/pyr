@@ -7,14 +7,11 @@ use core::panic::PanicInfo;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
+    pyr::pyr_entry()
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo<'_>) -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
+    puts("[pyr] panic\n");
+    loop {}
 }

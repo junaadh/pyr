@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 pyr-arch.workspace = true
 pyr-platform-qemu = { workspace = true, optional = true }
+pyr = { path = "../pyr" }
 
 [features]
 default = []

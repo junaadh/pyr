@@ -5,11 +5,14 @@
 
 use core::panic::PanicInfo;
 
+use pyr::pyr_entry;
+
+type Handle = *mut core::ffi::c_void;
+type SytemTable = *mut core::ffi::c_void;
+
 #[unsafe(no_mangle)]
-pub extern "C" fn efi_main() -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
+pub extern "efiapi" fn efi_main(_image: Handle, _st: SytemTable) -> usize {
+    pyr_entry()
 }
 
 #[panic_handler]
