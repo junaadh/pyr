@@ -9,7 +9,7 @@ pyr-arch.workspace = true
 pyr-platform-qemu = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["platform-qemu-virt"]
 platform-qemu-virt = ["dep:pyr-platform-qemu"]
 
 [lints]

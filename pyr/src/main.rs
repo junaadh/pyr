@@ -12,6 +12,8 @@ pub extern "C" fn _start() -> ! {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo<'_>) -> ! {
-    puts("[pyr] panic\n");
-    loop {}
+    pyr::println!("[pyr] panic");
+    loop {
+        core::hint::spin_loop();
+    }
 }

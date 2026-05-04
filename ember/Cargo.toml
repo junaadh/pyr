@@ -10,7 +10,7 @@ pyr-platform-qemu = { workspace = true, optional = true }
 pyr = { path = "../pyr" }
 
 [features]
-default = []
+default = ["platform-qemu-virt"]
 platform-qemu-virt = ["dep:pyr-platform-qemu"]
 
 [lints]

@@ -2,59 +2,69 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
-const UART: *mut u8 = 0x0900_0000 as *mut u8;
+pub mod console;
+
+use pyr_arch::sysregs::current_el::CurrentEl;
+
+#[cfg(feature = "platform-qemu-virt")]
+use pyr_platform_qemu::QemuVirt;
+
+#[cfg(feature = "platform-qemu-virt")]
+type ActivePlatform = QemuVirt;
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => {
+        $crate::console::_print(core::format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! println {
+    () => {
+        $crate::print!("\n")
+    };
+
+    ($fmt:expr) => {
+        $crate::print!(core::concat!($fmt, "\n"))
+    };
+
+    ($fmt:expr, $($arg:tt)*) => {
+        $crate::print!(core::concat!($fmt, "\n"), $($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        $crate::println!("[debug] {}", core::format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => {
+        $crate::println!("[pyr] {}", core::format_args!($($arg)*))
+    };
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pyr_entry() -> ! {
-    puts("[pyr] booting\n");
+    pyr::<ActivePlatform>()
+}
 
-    let el = current_el();
-    puts("[pyr] CurrentEL = ");
-    put_hex(el);
-    puts("\n");
+pub fn pyr<P>() -> !
+where
+    P: pyr_arch::platform::Platform,
+{
+    P::early_init();
+    console::init::<P>();
+    log!("booting");
 
+    let el = CurrentEl::mrs();
+    log!("CurrentEL = {:#018x}", el.raw());
+    log!("Exception level = EL{}", el.exception_level());
     loop {
         core::hint::spin_loop();
-    }
-}
-
-fn putc(c: u8) {
-    // SAFETY: QEMU virt PL011 UART base for early debug output.
-    unsafe {
-        UART.write_volatile(c);
-    }
-}
-
-fn puts(s: &str) {
-    for b in s.bytes() {
-        putc(b);
-    }
-}
-
-fn current_el() -> u64 {
-    let el: u64;
-
-    // SAFETY: Reading CurrentEL is valid at all AArch64 exception levels.
-    unsafe {
-        core::arch::asm!(
-            "mrs {out}, CurrentEL",
-            out = out(reg) el,
-            options(nomem, nostack)
-        );
-    }
-
-    el
-}
-
-fn put_hex(x: u64) {
-    puts("0x");
-
-    for shift in (0..64).step_by(4).rev() {
-        let n = ((x >> shift) & 0xf) as u8;
-        let c = match n {
-            0..=9 => b'0' + n,
-            _ => b'a' + (n - 10),
-        };
-        putc(c);
     }
 }

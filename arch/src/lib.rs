@@ -3,3 +3,5 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 pub mod addr;
+pub mod platform;
+pub mod sysregs;
