@@ -1,0 +1,16 @@
+[package]
+name = "pyr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pyr-arch.workspace = true
+pyr-platform-qemu = { workspace = true, optional = true }
+
+[features]
+default = []
+platform-qemu-virt = ["dep:pyr-platform-qemu"]
+
+[lints]
+workspace = true

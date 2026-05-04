@@ -1,0 +1,6 @@
+.venv/
+target/
+generated/
+docs/DDI0487F_a_armv8_arm.pdf
+armv8-book/
+esp/

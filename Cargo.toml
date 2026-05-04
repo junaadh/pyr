@@ -1,0 +1,31 @@
+[workspace]
+members = ["arch", "ember", "platform/qemu", "pyr"]
+resolver = "2"
+
+[workspace.dependencies]
+pyr-arch = { path = "arch" }
+pyr-platform-qemu = { path = "platform/qemu" }
+
+[workspace.package]
+version   = "0.1.0"
+edition   = "2024"
+license  = "MIT OR Apache-2.0"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+
+[profile.dev]
+panic   = "abort"
+
+[profile.release]
+panic   = "abort"
+lto   = true
+codegen-units = 1
+opt-level = "s"
+strip   = true

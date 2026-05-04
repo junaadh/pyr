@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FIRMWARE="/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
+
+cargo +nightly build \
+  -p ember \
+  --target aarch64-unknown-uefi \
+  --release \
+  --features platform-qemu-virt
+
+mkdir -p esp/EFI/BOOT
+cp target/aarch64-unknown-uefi/release/ember.efi esp/EFI/BOOT/BOOTAA64.EFI
+
+qemu-system-aarch64 \
+  -machine virt,virtualization=on \
+  -cpu cortex-a72 \
+  -m 1024M \
+  -nographic \
+  -bios "$FIRMWARE" \
+  -drive if=none,format=raw,file=fat:rw:esp,id=esp \
+  -device virtio-blk-device,drive=esp

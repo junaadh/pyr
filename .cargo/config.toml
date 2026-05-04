@@ -1,0 +1,17 @@
+[target.aarch64-unknown-none]
+rustflags = [
+  "-C", "link-args=-Tplatform/qemu/pyr.link.ld",
+
+  "-D", "unsafe_op_in_unsafe_fn",
+  "-D", "clippy::undocumented_unsafe_blocks",
+  "-D", "clippy::unwrap_used",
+  "-D", "clippy::expected_used"
+]
+
+[target.aarch64-unknown-uefi]
+rustflags = [
+  "-D", "unsafe_op_in_unsafe_fn",
+  "-D", "clippy::undocumented_unsafe_blocks",
+  "-D", "clippy::unwrap_used",
+  "-D", "clippy::expected_used"
+]

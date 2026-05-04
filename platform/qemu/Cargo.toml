@@ -1,0 +1,8 @@
+[package]
+name = "pyr-platform-qemu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pyr-arch.workspace = true
