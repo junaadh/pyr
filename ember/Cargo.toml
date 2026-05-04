@@ -3,6 +3,8 @@ name = "ember"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme.workspace = true
+repository.workspace = true
 
 [dependencies]
 pyr-arch.workspace = true
