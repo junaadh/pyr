@@ -8,6 +8,9 @@ use pyr_arch::{
 pub extern "C" fn tiny_guest_entry() -> ! {
     // SAFETY: This intentionally traps from EL1 to EL2
     unsafe {
+        core::arch::asm!("mov x0, #0x7079");
+        core::arch::asm!("mov x1, #0x1");
+        core::arch::asm!("mov x2, #'A'");
         core::arch::asm!("hvc #0");
     }
 

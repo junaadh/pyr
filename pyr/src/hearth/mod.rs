@@ -1,49 +1,38 @@
-use crate::trap::Resume;
+pub mod abi;
+pub mod caps;
+pub mod debug_console;
+pub mod error;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Scope {
-    GuestConsoleWrite,
-}
+pub use abi::*;
+pub use caps::*;
+use pyr_arch::exception::TrapFrame;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct CapSet {
-    guest_console_write: bool,
-}
+use crate::{hearth::error::HearthError, trap::Resume};
 
-impl CapSet {
-    pub const fn debug_guest() -> Self {
-        Self {
-            guest_console_write: true,
-        }
-    }
-
-    pub const fn allows(self, scope: Scope) -> bool {
-        match scope {
-            Scope::GuestConsoleWrite => self.guest_console_write,
-        }
-    }
-}
-
-pub fn handle_hvc(imm16: u16) -> Resume {
+pub fn handle_hvc(frame: &mut TrapFrame, imm16: u16) -> Resume {
+    let call = HvcCall::from_frame(frame, imm16);
     let caps = CapSet::debug_guest();
 
-    match imm16 {
-        0 => {
-            if caps.allows(Scope::GuestConsoleWrite) {
-                crate::log!("hearth.debug_console: HVC accepted");
-
-                Resume::Halt
-            } else {
-                crate::log!("hearth.debug_console: denied");
-
-                Resume::Halt
-            }
-        }
-
-        _ => {
-            crate::log!("unknown HVC imm16 = {:#06x}", imm16);
-
+    match dispatch(&call, frame, caps) {
+        Ok(()) => {
+            frame.x[0] = 0;
             Resume::Halt
         }
+        Err(err) => {
+            crate::log!("hearth.error: {err:?}");
+            frame.x[0] = err.code();
+            Resume::Halt
+        }
+    }
+}
+
+fn dispatch(
+    call: &HvcCall,
+    frame: &mut TrapFrame,
+    caps: CapSet,
+) -> Result<(), HearthError> {
+    match call.extension {
+        ExtensionId::DebugConsole => debug_console::handle(call, frame, caps),
+        ExtensionId::Unknown(id) => Err(HearthError::UnknownExtension(id)),
     }
 }

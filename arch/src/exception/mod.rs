@@ -1,7 +1,9 @@
 mod class;
+pub mod trap_frame;
 pub mod vectors;
 
 pub use class::*;
+pub use trap_frame::*;
 pub use vectors::*;
 
 /// # SAFETY
