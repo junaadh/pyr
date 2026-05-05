@@ -26,19 +26,28 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
             let hpfar = HpfarEl2::mrs();
 
             crate::log!("trap = DataAbortLower");
-            crate::log!("FAR_EL2 = {:#018x}", far.raw());
-            crate::log!("HPFAR_EL2 = {:#018x}", hpfar.raw());
-            crate::log!("fault IPA base = {:#018x}", hpfar.ipa_base().as_u64());
-            crate::log!(
-                "data abort iss: dfsc={:#04x} wnr={} s1ptw={} isv={} sas={} srt={}",
-                iss.dfsc,
-                iss.wnr,
-                iss.s1ptw,
-                iss.isv,
-                iss.sas,
-                iss.srt,
-            );
-            Resume::AdvancePcAndReturn
+
+            let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
+            crate::log!("fault IPA = {ipa:#018x}");
+
+            if iss.wnr && iss.sas == 0 && ipa == 0x0900_0000 {
+                let reg = iss.srt as usize;
+
+                if let Some(byte) = frame.x.get(reg) {
+                    let byte = *byte as u8;
+
+                    crate::log!("mmio: PL011 write byte {}", byte as char);
+                    crate::print!("{}", byte as char);
+
+                    Resume::AdvancePcAndReturn
+                } else {
+                    crate::log!("invalid syndrome register: {reg}");
+                    Resume::Halt
+                }
+            } else {
+                crate::log!("unhandled data abort");
+                Resume::Halt
+            }
         }
         other => {
             crate::log!("unhandled trap: {other:?}");
