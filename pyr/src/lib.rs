@@ -104,5 +104,7 @@ where
     let stage2 = stage2::build_identity_map();
     log!("stage2 root = {:#018x}", stage2.root_raw());
 
+    stage2::enable_stage2(stage2.root_raw());
+
     guest::enter_tiny_guest()
 }
