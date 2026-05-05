@@ -1,8 +1,8 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 #[repr(transparent)]
-pub struct PhysAddr(u64);
+pub struct IpaAddr(u64);
 
-impl PhysAddr {
+impl IpaAddr {
     pub const fn new(addr: u64) -> Self {
         Self(addr)
     }

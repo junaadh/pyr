@@ -1,8 +1,8 @@
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(transparent)]
-pub struct SpEL1(u64);
+pub struct SpEl1(u64);
 
-impl SpEL1 {
+impl SpEl1 {
     pub fn msr(self) {
         // SAFETY: Caller must execute at EL2 or higher.
         unsafe {

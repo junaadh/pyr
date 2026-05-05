@@ -1,7 +1,7 @@
 use pyr_arch::{
     barrier::isb,
     exception::eret,
-    sysregs::{ElrEl2, SpsrEl2, sp_el1::SpEL1},
+    sysregs::{ElrEl2, SpsrEl2, sp_el1::SpEl1},
 };
 
 #[repr(align(16))]
@@ -48,7 +48,7 @@ pub fn enter_tiny_guest() -> ! {
     crate::log!("SP_EL1 = {stack_top:#018x}");
 
     ElrEl2::new(entry).msr();
-    SpEL1::new(stack_top).msr();
+    SpEl1::new(stack_top).msr();
     SpsrEl2::el1h_masked().msr();
     isb();
 

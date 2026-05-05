@@ -5,12 +5,15 @@
 pub mod console;
 pub mod guest;
 pub mod hearth;
+pub mod page;
 pub mod trap;
 
 use pyr_arch::{
     barrier::isb,
     exception::install_el2_vectors,
-    sysregs::{HcrEl2, SctlrEl2, VbarEl2, current_el::CurrentEl},
+    sysregs::{
+        HcrEl2, SctlrEl2, VbarEl2, VtcrEl2, VttbrEl2, current_el::CurrentEl,
+    },
 };
 
 #[cfg(feature = "platform-qemu-virt")]
@@ -94,6 +97,9 @@ where
     isb();
 
     log!("HCR_EL2 after RW = {:#018x}", HcrEl2::mrs().raw());
+
+    log!("VTCR_EL2 = {:#018x}", VtcrEl2::mrs().raw());
+    log!("VTTBR_EL2 = {:#018x}", VttbrEl2::mrs().raw());
 
     guest::enter_tiny_guest()
 }
