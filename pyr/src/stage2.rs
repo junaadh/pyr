@@ -9,20 +9,28 @@ struct Tables {
     l2: PageTable,
 }
 
+#[repr(C, align(4096))]
+pub struct BootScratch {
+    tables: Tables,
+    guard: [u8; 4096],
+    pub guest_stack: [u8; 16 * 1024],
+}
+
 #[unsafe(link_section = "__DATA,__stage2")]
-static mut TABLES: Tables = Tables {
-    root: PageTable::zeroed(),
-    l2: PageTable::zeroed(),
+pub static mut SCRATCH: BootScratch = BootScratch {
+    tables: Tables {
+        root: PageTable::zeroed(),
+        l2: PageTable::zeroed(),
+    },
+    guard: [0; 4096],
+    guest_stack: [0; 16 * 1024],
 };
 
 pub fn build_identity_map() -> Stage2Tables<Built> {
     // SAFETY: single-core early boot only. Stage-2 tables are built once.
-    let tables = unsafe {
-        let raw_tables = &raw mut TABLES;
-        &mut (*raw_tables)
-    };
-
-    let mut stage2 = Stage2Tables::new(&mut tables.root, &mut tables.l2);
+    let scratch = unsafe { &mut *core::ptr::addr_of_mut!(SCRATCH) };
+    let mut stage2 =
+        Stage2Tables::new(&mut scratch.tables.root, &mut scratch.tables.l2);
 
     // QEMU virt RAM starts at 0x4000_0000.
     // Map first 1 GiB identity for now.

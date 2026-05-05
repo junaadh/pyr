@@ -3,7 +3,7 @@ mod resume;
 use crate::hearth;
 use pyr_arch::{
     exception::{ExceptionClass, TrapFrame},
-    sysregs::EsrEl2,
+    sysregs::{EsrEl2, FarEl2, HpfarEl2},
 };
 pub use resume::*;
 
@@ -21,6 +21,25 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
             crate::log!("trap = HVC64 imm16 = {imm16:#06x}");
             hearth::handle_hvc(frame, imm16)
         }
+        ExceptionClass::DataAbortLower { iss } => {
+            let far = FarEl2::mrs();
+            let hpfar = HpfarEl2::mrs();
+
+            crate::log!("trap = DataAbortLower");
+            crate::log!("FAR_EL2 = {:#018x}", far.raw());
+            crate::log!("HPFAR_EL2 = {:#018x}", hpfar.raw());
+            crate::log!("fault IPA base = {:#018x}", hpfar.ipa_base().as_u64());
+            crate::log!(
+                "data abort iss: dfsc={:#04x} wnr={} s1ptw={} isv={} sas={} srt={}",
+                iss.dfsc,
+                iss.wnr,
+                iss.s1ptw,
+                iss.isv,
+                iss.sas,
+                iss.srt,
+            );
+            Resume::AdvancePcAndReturn
+        }
         other => {
             crate::log!("unhandled trap: {other:?}");
             Resume::Halt
@@ -29,9 +48,14 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
 
     match resume {
         Resume::ReturnToGuest => {
-            // skip HVC instruction (4 bytes)
-            frame.elr_el2 += 4;
             crate::log!("resuming guest @ {:#018x}", frame.elr_el2);
+        }
+        Resume::AdvancePcAndReturn => {
+            frame.elr_el2 += 4;
+            crate::log!(
+                "advancing and resuming guest @ {:#018x}",
+                frame.elr_el2
+            );
         }
         Resume::Halt => {
             crate::log!("halting after trap");

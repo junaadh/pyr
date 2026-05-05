@@ -4,45 +4,52 @@ use pyr_arch::{
     sysregs::{ElrEl2, SpsrEl2, sp_el1::SpEl1},
 };
 
-#[repr(align(16))]
-struct GuestStack([u8; 16 * 4096]);
+use crate::stage2::SCRATCH;
 
-#[unsafe(link_section = "__DATA,__guest_stack")]
-static mut GUEST_STACK: GuestStack = GuestStack([0; 16 * 4096]);
+core::arch::global_asm!(
+    r#"
+    .section .text.guest, "ax"
+    .align 4
+    .global __tiny_guest_entry
 
-#[unsafe(no_mangle)]
-pub extern "C" fn tiny_guest_entry() -> ! {
-    debug_print_guest('A');
-    debug_print_guest('B');
+__tiny_guest_entry:
+    mov x0, #0x7079
+    mov x1, #1
+    mov x2, #'A'
+    hvc #0x0
 
-    loop {
-        core::hint::spin_loop();
-    }
-}
+    mov x0, #0x7079
+    mov x1, #1
+    mov x2, #'B'
+    hvc #0x0
+    
+    mov x3, #0x09000000
+    mov w4, #'X'
+    strb w4, [x3]
 
-fn debug_print_guest(ch: char) {
-    let arg = ch as u64;
+    mov x0, #0x7079
+    mov x1, #1
+    mov x2, #'Z'
+    hvc #0x0
 
-    // SAFETY: This intentionally performs a Pyr debug-console hypercall from EL1.
-    unsafe {
-        core::arch::asm!(
-            "hvc #0",
-            in("x0") 0x7079u64,
-            in("x1") 0x1u64,
-            in("x2") arg,
-            lateout("x0") _,
-            options(nostack),
-        );
-    }
+1:
+    wfe
+    b 1b
+    "#
+);
+
+unsafe extern "C" {
+    fn __tiny_guest_entry() -> !;
 }
 
 pub fn enter_tiny_guest() -> ! {
-    let entry = tiny_guest_entry as *const () as u64;
+    let entry = __tiny_guest_entry as *const () as u64;
 
     // SAFETY: We intentionally define a 4096 array in memory and point the top to the base + len
     let stack_top = unsafe {
-        let base = core::ptr::addr_of!(GUEST_STACK.0) as u64;
-        base + 16 * 4096
+        let scratch = &raw const SCRATCH;
+        let base = core::ptr::addr_of!((*scratch).guest_stack) as u64;
+        base + 16 * 1024
     };
 
     crate::log!("entering tiney EL1 guest at {entry:#018x}");

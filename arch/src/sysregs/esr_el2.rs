@@ -1,4 +1,4 @@
-use crate::exception::ExceptionClass;
+use crate::exception::{DataAbortIss, ExceptionClass};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(transparent)]
@@ -44,7 +44,9 @@ impl EsrEl2 {
             0x16 => ExceptionClass::Hvc64 {
                 imm16: (iss & 0xffff) as u16,
             },
-            0x24 => ExceptionClass::DataAbortLower { iss },
+            0x24 => ExceptionClass::DataAbortLower {
+                iss: DataAbortIss::decode(iss),
+            },
             0x20 => ExceptionClass::InstructionAbortLower { iss },
             0x18 => ExceptionClass::SysregTrap { iss },
             0x01 => ExceptionClass::WfiWfe,
