@@ -5,7 +5,7 @@
 pub mod console;
 pub mod guest;
 pub mod hearth;
-pub mod page;
+pub mod stage2;
 pub mod trap;
 
 use pyr_arch::{
@@ -100,6 +100,9 @@ where
 
     log!("VTCR_EL2 = {:#018x}", VtcrEl2::mrs().raw());
     log!("VTTBR_EL2 = {:#018x}", VttbrEl2::mrs().raw());
+
+    let stage2 = stage2::build_identity_map();
+    log!("stage2 root = {:#018x}", stage2.root_raw());
 
     guest::enter_tiny_guest()
 }

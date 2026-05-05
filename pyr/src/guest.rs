@@ -5,9 +5,10 @@ use pyr_arch::{
 };
 
 #[repr(align(16))]
-struct GuestStack([u8; 4096]);
+struct GuestStack([u8; 16 * 4096]);
 
-static mut GUEST_STACK: GuestStack = GuestStack([0; 4096]);
+#[unsafe(link_section = "__DATA,__guest_stack")]
+static mut GUEST_STACK: GuestStack = GuestStack([0; 16 * 4096]);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn tiny_guest_entry() -> ! {
@@ -41,7 +42,7 @@ pub fn enter_tiny_guest() -> ! {
     // SAFETY: We intentionally define a 4096 array in memory and point the top to the base + len
     let stack_top = unsafe {
         let base = core::ptr::addr_of!(GUEST_STACK.0) as u64;
-        base + 4096
+        base + 16 * 4096
     };
 
     crate::log!("entering tiney EL1 guest at {entry:#018x}");
