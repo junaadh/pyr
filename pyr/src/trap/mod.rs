@@ -1,6 +1,6 @@
 mod resume;
 
-use crate::hearth::{self, HvcCall};
+use crate::hearth;
 use pyr_arch::{
     exception::{ExceptionClass, TrapFrame},
     sysregs::EsrEl2,
@@ -28,13 +28,16 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
     };
 
     match resume {
-        Resume::ReturnToGuest => crate::log!(
-            "resume requested but vector resume is not implemented yet"
-        ),
-        Resume::Halt => crate::log!("halting after trap"),
-    }
-
-    loop {
-        core::hint::spin_loop();
+        Resume::ReturnToGuest => {
+            // skip HVC instruction (4 bytes)
+            frame.elr_el2 += 4;
+            crate::log!("resuming guest @ {:#018x}", frame.elr_el2);
+        }
+        Resume::Halt => {
+            crate::log!("halting after trap");
+            loop {
+                core::hint::spin_loop();
+            }
+        }
     }
 }

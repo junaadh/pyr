@@ -1,30 +1,54 @@
 use pyr_arch::{
     barrier::isb,
     exception::eret,
-    sysregs::{ElrEl2, SpsrEl2},
+    sysregs::{ElrEl2, SpsrEl2, sp_el1::SpEL1},
 };
+
+#[repr(align(16))]
+struct GuestStack([u8; 4096]);
+
+static mut GUEST_STACK: GuestStack = GuestStack([0; 4096]);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn tiny_guest_entry() -> ! {
-    // SAFETY: This intentionally traps from EL1 to EL2
-    unsafe {
-        core::arch::asm!("mov x0, #0x7079");
-        core::arch::asm!("mov x1, #0x1");
-        core::arch::asm!("mov x2, #'A'");
-        core::arch::asm!("hvc #0");
-    }
+    debug_print_guest('A');
+    debug_print_guest('B');
 
     loop {
         core::hint::spin_loop();
     }
 }
 
+fn debug_print_guest(ch: char) {
+    let arg = ch as u64;
+
+    // SAFETY: This intentionally performs a Pyr debug-console hypercall from EL1.
+    unsafe {
+        core::arch::asm!(
+            "hvc #0",
+            in("x0") 0x7079u64,
+            in("x1") 0x1u64,
+            in("x2") arg,
+            lateout("x0") _,
+            options(nostack),
+        );
+    }
+}
+
 pub fn enter_tiny_guest() -> ! {
     let entry = tiny_guest_entry as *const () as u64;
 
+    // SAFETY: We intentionally define a 4096 array in memory and point the top to the base + len
+    let stack_top = unsafe {
+        let base = core::ptr::addr_of!(GUEST_STACK.0) as u64;
+        base + 4096
+    };
+
     crate::log!("entering tiney EL1 guest at {entry:#018x}");
+    crate::log!("SP_EL1 = {stack_top:#018x}");
 
     ElrEl2::new(entry).msr();
+    SpEL1::new(stack_top).msr();
     SpsrEl2::el1h_masked().msr();
     isb();
 

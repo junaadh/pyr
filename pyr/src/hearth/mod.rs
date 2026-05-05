@@ -16,7 +16,7 @@ pub fn handle_hvc(frame: &mut TrapFrame, imm16: u16) -> Resume {
     match dispatch(&call, frame, caps) {
         Ok(()) => {
             frame.x[0] = 0;
-            Resume::Halt
+            Resume::ReturnToGuest
         }
         Err(err) => {
             crate::log!("hearth.error: {err:?}");
