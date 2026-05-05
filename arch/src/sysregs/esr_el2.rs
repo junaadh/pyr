@@ -1,3 +1,5 @@
+use crate::exception::ExceptionClass;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(transparent)]
 pub struct EsrEl2(u64);
@@ -34,8 +36,19 @@ impl EsrEl2 {
         (self.0 & 0x01ff_ffff) as u32
     }
 
-    #[inline(always)]
-    pub const fn is_hvc64(self) -> bool {
-        self.ec() == 0x16
+    pub const fn decode(self) -> ExceptionClass {
+        let ec = self.ec();
+        let iss = self.iss();
+
+        match ec {
+            0x16 => ExceptionClass::Hvc64 {
+                imm16: (iss & 0xffff) as u16,
+            },
+            0x24 => ExceptionClass::DataAbortLower { iss },
+            0x20 => ExceptionClass::InstructionAbortLower { iss },
+            0x18 => ExceptionClass::SysregTrap { iss },
+            0x01 => ExceptionClass::WfiWfe,
+            _ => ExceptionClass::Unknown { ec, iss },
+        }
     }
 }

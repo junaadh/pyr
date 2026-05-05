@@ -1,5 +1,7 @@
+mod class;
 pub mod vectors;
 
+pub use class::*;
 pub use vectors::*;
 
 /// # SAFETY

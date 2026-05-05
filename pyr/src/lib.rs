@@ -4,6 +4,7 @@
 
 pub mod console;
 pub mod guest;
+pub mod hearth;
 pub mod trap;
 
 use pyr_arch::{
