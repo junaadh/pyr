@@ -55,4 +55,34 @@ impl HcrEl2 {
     pub const fn with_twe(self) -> Self {
         Self(self.0 | (1 << 14))
     }
+
+    #[inline(always)]
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    #[inline(always)]
+    pub const fn without_tge(self) -> Self {
+        Self(self.0 & !(1 << 27))
+    }
+
+    #[inline(always)]
+    pub const fn without_e2h(self) -> Self {
+        Self(self.0 & !(1 << 34))
+    }
+
+    #[inline(always)]
+    pub const fn with_amo(self) -> Self {
+        Self(self.0 | (1 << 5))
+    }
+
+    #[inline(always)]
+    pub const fn with_imo(self) -> Self {
+        Self(self.0 | (1 << 4))
+    }
+
+    #[inline(always)]
+    pub const fn with_fmo(self) -> Self {
+        Self(self.0 | (1 << 3))
+    }
 }

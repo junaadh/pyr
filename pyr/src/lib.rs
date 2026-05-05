@@ -3,10 +3,13 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 pub mod console;
+pub mod guest;
+pub mod trap;
 
 use pyr_arch::{
     barrier::isb,
-    sysregs::{HcrEl2, SctlrEl2, current_el::CurrentEl},
+    exception::install_el2_vectors,
+    sysregs::{HcrEl2, SctlrEl2, VbarEl2, current_el::CurrentEl},
 };
 
 #[cfg(feature = "platform-qemu-virt")]
@@ -64,6 +67,10 @@ where
     console::init::<P>();
     log!("booting");
 
+    install_el2_vectors();
+
+    log!("VBAR_EL2 = {:#018x}", VbarEl2::mrs().raw());
+
     let el = CurrentEl::mrs();
     log!("CurrentEL = {:#018x}", el.raw());
     log!("Exception level = EL{}", el.exception_level());
@@ -75,12 +82,17 @@ where
     log!("SCTLR_EL2 = {:#018x}", sctlr.raw());
     log!("SCTLR_EL2.M = {}", sctlr.mmu_enabled());
 
-    HcrEl2::mrs().with_rw().msr();
+    HcrEl2::mrs()
+        .without_tge()
+        .without_e2h()
+        .with_rw()
+        .with_amo()
+        .with_imo()
+        .with_fmo()
+        .msr();
     isb();
 
     log!("HCR_EL2 after RW = {:#018x}", HcrEl2::mrs().raw());
 
-    loop {
-        core::hint::spin_loop();
-    }
+    guest::enter_tiny_guest()
 }
