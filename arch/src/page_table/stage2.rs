@@ -128,11 +128,11 @@ impl Stage2Tables<Building> {
 }
 
 impl Stage2Tables<Built> {
-    pub fn root_base(&self) -> PhysAddr {
+    pub fn root_pa(&self) -> PhysAddr {
         PhysAddr::new(self.root.entries.as_ptr() as u64)
     }
 
     pub fn root_raw(&self) -> u64 {
-        self.root_base().as_u64()
+        self.root_pa().as_u64()
     }
 }

@@ -1,3 +1,4 @@
+use crate::{ActivePlatform, guest, log, stage2::Stage2Vm};
 use pyr_arch::{
     barrier::isb,
     exception::install_el2_vectors,
@@ -6,8 +7,6 @@ use pyr_arch::{
         el2::{HcrEl2, SctlrEl2, VbarEl2, VtcrEl2, VttbrEl2},
     },
 };
-
-use crate::{ActivePlatform, guest, log, stage2};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pyr_entry() -> ! {
@@ -51,10 +50,10 @@ where
     log!("VTCR_EL2 = {:#018x}", VtcrEl2::mrs().raw());
     log!("VTTBR_EL2 = {:#018x}", VttbrEl2::mrs().raw());
 
-    let stage2 = stage2::build_identity_map();
+    let stage2 = Stage2Vm::identity_1gib();
     log!("stage2 root = {:#018x}", stage2.root_raw());
 
-    stage2::enable_stage2(stage2.root_raw());
+    stage2.enable();
 
     guest::tiny::enter_tiny_guest()
 }

@@ -1,6 +1,6 @@
 use core::arch::global_asm;
 
-use crate::{guest::launch::enter_el1_guest, stage2::SCRATCH};
+use crate::guest::launch::enter_el1_guest;
 
 global_asm!(include_str!("tiny.S"));
 
@@ -12,11 +12,7 @@ pub fn enter_tiny_guest() -> ! {
     let entry = __tiny_guest_entry as *const () as u64;
 
     // SAFETY: We intentionally define a 4096 array in memory and point the top to the base + len
-    let stack_top = unsafe {
-        let scratch = &raw const SCRATCH;
-        let base = core::ptr::addr_of!((*scratch).guest_stack) as u64;
-        base + 16 * 1024
-    };
+    let stack_top = crate::stage2::scratch::guest_stack_top();
 
     enter_el1_guest(super::config::GuestConfig {
         entry,
