@@ -1,4 +1,4 @@
-use crate::{addr::PhysAddr, barrier::isb, sysregs::VbarEl2};
+use crate::{addr::PhysAddr, barrier::isb, sysregs::el2::VbarEl2};
 
 core::arch::global_asm!(include_str!("vectors.S"));
 

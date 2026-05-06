@@ -5,9 +5,11 @@
 
 use core::panic::PanicInfo;
 
+core::arch::global_asm!(include_str!("start.S"));
+
 #[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
-    pyr::pyr_entry()
+pub extern "C" fn pyr_bare_entry() -> ! {
+    pyr::boot::enter()
 }
 
 #[panic_handler]

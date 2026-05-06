@@ -3,7 +3,7 @@ use pyr_arch::{
     addr::IpaAddr,
     exception::{DataAbortIss, TrapFrame},
     platform::Platform,
-    sysregs::{FarEl2, HpfarEl2},
+    sysregs::el2::{FarEl2, HpfarEl2},
 };
 
 pub fn handle_data_abort(frame: &mut TrapFrame, iss: DataAbortIss) -> Resume {

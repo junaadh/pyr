@@ -3,7 +3,7 @@ mod resume;
 use crate::{hearth, mmio};
 use pyr_arch::{
     exception::{ExceptionClass, TrapFrame},
-    sysregs::EsrEl2,
+    sysregs::el2::EsrEl2,
 };
 pub use resume::*;
 

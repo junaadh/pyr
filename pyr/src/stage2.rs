@@ -1,7 +1,7 @@
 use pyr_arch::addr::{IpaAddr, PhysAddr};
 use pyr_arch::barrier::{dsb_ish, isb};
 use pyr_arch::page_table::{Built, MemAttr, PageTable, Stage2Tables};
-use pyr_arch::sysregs::{HcrEl2, VtcrEl2, VttbrEl2};
+use pyr_arch::sysregs::el2::{HcrEl2, VtcrEl2, VttbrEl2};
 
 #[repr(align(4096))]
 struct Tables {

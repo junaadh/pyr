@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo +nightly build \
+  -p pyr \
+  --target aarch64-unknown-none \
+  --release \
+  --features platform-qemu-virt
+
+OBJCOPY="$(rustc +nightly --print sysroot)/lib/rustlib/$(rustc +nightly -vV | sed -n 's/^host: //p')/bin/rust-objcopy"
+
+"$OBJCOPY" -O binary \
+  target/aarch64-unknown-none/release/pyr \
+  target/pyr-bare.bin
+
+qemu-system-aarch64 \
+  -machine virt,virtualization=on,secure=on \
+  -cpu cortex-a57 \
+  -m 1024M \
+  -nographic \
+  -kernel target/pyr-bare.bin

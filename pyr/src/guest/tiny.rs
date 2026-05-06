@@ -4,7 +4,10 @@ use crate::stage2::SCRATCH;
 use pyr_arch::{
     barrier::isb,
     exception::eret,
-    sysregs::{ElrEl2, SpEl1, SpsrEl2},
+    sysregs::{
+        el1::SpEl1,
+        el2::{ElrEl2, SpsrEl2},
+    },
 };
 
 global_asm!(include_str!("tiny.S"));
