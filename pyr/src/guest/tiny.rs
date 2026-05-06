@@ -1,14 +1,6 @@
 use core::arch::global_asm;
 
-use crate::stage2::SCRATCH;
-use pyr_arch::{
-    barrier::isb,
-    exception::eret,
-    sysregs::{
-        el1::SpEl1,
-        el2::{ElrEl2, SpsrEl2},
-    },
-};
+use crate::{guest::launch::enter_el1_guest, stage2::SCRATCH};
 
 global_asm!(include_str!("tiny.S"));
 
@@ -26,17 +18,12 @@ pub fn enter_tiny_guest() -> ! {
         base + 16 * 1024
     };
 
-    crate::log!("entering tiney EL1 guest at {entry:#018x}");
-    crate::log!("SP_EL1 = {stack_top:#018x}");
-
-    ElrEl2::new(entry).msr();
-    SpEl1::new(stack_top).msr();
-    SpsrEl2::el1h_masked().msr();
-    isb();
-
-    crate::log!("ELR_EL2 = {:#018x}", ElrEl2::mrs().raw());
-    crate::log!("SPSR_EL2 = {:#018x}", SpsrEl2::mrs().raw());
-
-    // SAFETY: ELR_EL2 points to tiny_guest_entry and SPSR_EL2 is EL1h masked
-    unsafe { eret() }
+    enter_el1_guest(super::config::GuestConfig {
+        entry,
+        stack_top,
+        x0: 0,
+        x1: 0,
+        x2: 0,
+        x3: 0,
+    })
 }
