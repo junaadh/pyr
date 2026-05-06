@@ -1,12 +1,12 @@
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
-    page_table::{Built, MemAttr, Stage2Tables},
+    page_table::{Installed, MemAttr, Stage2Tables},
 };
 
 use crate::stage2::scratch;
 
 pub struct Stage2Vm {
-    tables: Stage2Tables<Built>,
+    tables: Stage2Tables<Installed>,
 }
 
 impl Stage2Vm {
@@ -26,7 +26,7 @@ impl Stage2Vm {
             .unwrap_or_else(|_| panic_stage2_map_failed());
 
         Self {
-            tables: tables.build(),
+            tables: tables.install(),
         }
     }
 
