@@ -39,6 +39,14 @@ pub fn get_mut() -> &'static mut BootScratch {
     unsafe { &mut *core::ptr::addr_of_mut!(SCRATCH) }
 }
 
+pub fn guest_stack_base() -> u64 {
+    // SAFETY: Taking a raw address of static storage; no reference to mutable static is created.
+    unsafe {
+        let scratch = &raw const SCRATCH;
+        core::ptr::addr_of!((*scratch).guest_stack) as u64
+    }
+}
+
 pub fn guest_stack_top() -> u64 {
     // SAFETY: Taking a raw address of static storage; no reference to mutable static is created.
     unsafe {

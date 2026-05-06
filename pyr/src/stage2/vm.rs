@@ -3,7 +3,10 @@ use pyr_arch::{
     page_table::{Building, Installed, MapError, MemAttr, Stage2Tables},
 };
 
-use crate::stage2::scratch;
+use crate::{
+    guest::{memory::MapGuestRegion, region::GuestRegion},
+    stage2::scratch,
+};
 
 pub struct Stage2Vm<S> {
     tables: Stage2Tables<S>,
@@ -82,6 +85,28 @@ impl Stage2Vm<Installed> {
         self.tables
             .map_pages(ipa, pa, size, attr)
             .unwrap_or_else(|err| panic_stage2_map_failed(err));
+    }
+}
+
+impl MapGuestRegion for Stage2Vm<Building> {
+    fn map_guest_region(&mut self, region: GuestRegion) {
+        self.map_pages(
+            region.ipa(),
+            region.pa(),
+            Self::align_4k(region.size()),
+            region.attr(),
+        );
+    }
+}
+
+impl MapGuestRegion for Stage2Vm<Installed> {
+    fn map_guest_region(&mut self, region: GuestRegion) {
+        self.map_pages(
+            region.ipa(),
+            region.pa(),
+            Self::align_4k(region.size()),
+            region.attr(),
+        );
     }
 }
 

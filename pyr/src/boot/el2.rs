@@ -1,4 +1,9 @@
-use crate::{ActivePlatform, guest, log, stage2::Stage2Vm};
+use crate::{
+    ActivePlatform,
+    guest::{self, memory::GuestMemory},
+    log,
+    stage2::Stage2Vm,
+};
 use pyr_arch::{
     barrier::isb,
     exception::install_el2_vectors,
@@ -52,8 +57,11 @@ where
 
     let mut stage2 = Stage2Vm::new();
 
-    let (guest_ipa, guest_pa, guest_len) = guest::tiny::load_tiny_guest();
-    stage2.map_guest_ram(guest_ipa, guest_pa, guest_len);
+    let image = guest::tiny::load_tiny_guest();
+    let stack = GuestMemory::stack_region();
+
+    GuestMemory::map_region(&mut stage2, image);
+    GuestMemory::map_region(&mut stage2, stack);
 
     log!("stage2 root = {:#018x}", stage2.root_raw());
 
