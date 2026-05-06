@@ -50,10 +50,14 @@ where
     log!("VTCR_EL2 = {:#018x}", VtcrEl2::mrs().raw());
     log!("VTTBR_EL2 = {:#018x}", VttbrEl2::mrs().raw());
 
-    let stage2 = Stage2Vm::identity_1gib();
+    let mut stage2 = Stage2Vm::new();
+
+    let (guest_ipa, guest_pa, guest_len) = guest::tiny::load_tiny_guest();
+    stage2.map_guest_ram(guest_ipa, guest_pa, guest_len);
+
     log!("stage2 root = {:#018x}", stage2.root_raw());
 
-    stage2.enable();
+    stage2.install();
 
     guest::tiny::enter_tiny_guest()
 }

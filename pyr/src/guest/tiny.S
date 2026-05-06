@@ -1,8 +1,9 @@
     .section .text.guest, "ax"
     .align 4
-    .global __tiny_guest_entry
+    .global __tiny_guest_start
+    .global __tiny_guest_end
 
-__tiny_guest_entry:
+__tiny_guest_start:
     mov x0, #0x7079
     mov x1, #1
     mov x2, #'A'
@@ -25,3 +26,5 @@ __tiny_guest_entry:
 1:
     wfe
     b 1b
+
+__tiny_guest_end:
