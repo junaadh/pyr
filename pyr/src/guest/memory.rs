@@ -25,6 +25,8 @@ impl GuestMemory {
     pub const ENTRY_IPA: IpaAddr = IpaAddr::new(0x4000_0000);
     pub const STACK_IPA: IpaAddr = IpaAddr::new(0x4002_0000);
     pub const STACK_SIZE: usize = 16 * 1024;
+    pub const DTB_IPA: IpaAddr = IpaAddr::new(0x4100_0000);
+    pub const DTB_MAX_SIZE: usize = 64 * 1024;
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn load_image(
@@ -70,6 +72,33 @@ impl GuestMemory {
         Stage2Vm<S>: MapGuestRegion,
     {
         stage2.map_guest_region(region);
+    }
+
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn load_dtb(
+        src: *const u8,
+        len: usize,
+    ) -> Result<GuestRegion, GuestMemoryError> {
+        let scratch = scratch::get_mut();
+
+        if len > scratch.dtb.len() {
+            return Err(GuestMemoryError::ImageTooLarge);
+        }
+
+        // SAFETY:
+        // - `src` points to an embedded dtb payload range.
+        // - destination is dedicated scratch memory.
+        // - caller provides `len` derived from start/end linker symbols.
+        // - source and destination are distinct regions.
+        unsafe {
+            core::ptr::copy_nonoverlapping(src, scratch.dtb.as_mut_ptr(), len);
+        }
+
+        Ok(GuestRegion::ram(
+            Self::DTB_IPA,
+            PhysAddr::new(scratch::dtb_base()),
+            len,
+        ))
     }
 }
 

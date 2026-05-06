@@ -27,4 +27,24 @@ impl GuestConfig {
         self.x3 = 0;
         self
     }
+
+    pub const fn with_x0(mut self, value: u64) -> Self {
+        self.x0 = value;
+        self
+    }
+
+    pub const fn with_x1(mut self, value: u64) -> Self {
+        self.x1 = value;
+        self
+    }
+
+    pub const fn with_x2(mut self, value: u64) -> Self {
+        self.x2 = value;
+        self
+    }
+
+    pub const fn with_x3(mut self, value: u64) -> Self {
+        self.x3 = value;
+        self
+    }
 }

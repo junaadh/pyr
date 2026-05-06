@@ -13,6 +13,7 @@ pub struct BootScratch {
     pub _guard: [u8; 4096],
     pub guest_stack: [u8; 16 * 1024],
     pub guest_ram: [u8; 128 * 1024],
+    pub dtb: [u8; 64 * 1024],
 }
 
 impl BootScratch {
@@ -26,6 +27,7 @@ impl BootScratch {
             _guard: [0; 4096],
             guest_stack: [0; 16 * 1024],
             guest_ram: [0; 128 * 1024],
+            dtb: [0; 64 * 1024],
         }
     }
 }
@@ -61,5 +63,13 @@ pub fn guest_ram_base() -> u64 {
     unsafe {
         let scratch = &raw const SCRATCH;
         core::ptr::addr_of!((*scratch).guest_ram) as u64
+    }
+}
+
+pub fn dtb_base() -> u64 {
+    // SAFETY: Taking a raw address of static storage; no reference to mutable static is created.
+    unsafe {
+        let scratch = &raw const SCRATCH;
+        core::ptr::addr_of!((*scratch).dtb) as u64
     }
 }
