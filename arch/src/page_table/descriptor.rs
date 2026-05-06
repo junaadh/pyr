@@ -39,6 +39,27 @@ impl Descriptor {
 
         Self(value)
     }
+
+    pub const fn page(addr: u64, attr: MemAttr) -> Self {
+        let mut value = addr & 0x0000_ffff_ffff_f000;
+
+        // valid page descriptor at level 3
+        value |= 0b11;
+
+        // stage-2 access permissions: full access
+        value |= 0b11 << 6;
+
+        // shareability: inner shareable
+        value |= 0b11 << 8;
+
+        // access flag
+        value |= 1 << 10;
+
+        // attr index
+        value |= (attr.index() as u64) << 2;
+
+        Self(value)
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

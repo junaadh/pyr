@@ -55,6 +55,7 @@ impl PageTable {
 pub struct Stage2Tables<S> {
     root: &'static mut PageTable,
     l2: &'static mut PageTable,
+    l3: &'static mut PageTable,
     _state: PhantomData<S>,
 }
 
@@ -62,13 +63,16 @@ impl Stage2Tables<Building> {
     pub fn new(
         root: &'static mut PageTable,
         l2: &'static mut PageTable,
+        l3: &'static mut PageTable,
     ) -> Self {
         root.clear();
         l2.clear();
+        l3.clear();
 
         Self {
             root,
             l2,
+            l3,
             _state: PhantomData,
         }
     }
@@ -87,8 +91,19 @@ impl Stage2Tables<Building> {
         Stage2Tables {
             root: self.root,
             l2: self.l2,
+            l3: self.l3,
             _state: PhantomData,
         }
+    }
+
+    pub fn map_pages(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+        attr: MemAttr,
+    ) -> Result<(), MapError> {
+        self.map_pages_inner(ipa, pa, size, attr)
     }
 }
 
@@ -104,10 +119,23 @@ impl Stage2Tables<Installed> {
         flush_stage2_tlb();
         Ok(())
     }
+
+    pub fn map_pages(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+        attr: MemAttr,
+    ) -> Result<(), MapError> {
+        self.map_pages_inner(ipa, pa, size, attr)?;
+        flush_stage2_tlb();
+        Ok(())
+    }
 }
 
 impl<S> Stage2Tables<S> {
     const BLOCK_SIZE: u64 = 2 * 1024 * 1024;
+    const PAGE_SIZE: u64 = 4096;
 
     pub fn root_pa(&self) -> PhysAddr {
         self.root.paddr()
@@ -192,12 +220,102 @@ impl<S> Stage2Tables<S> {
         Ok(())
     }
 
+    fn map_pages_inner(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+        attr: MemAttr,
+    ) -> Result<(), MapError> {
+        Self::validate_page_mapping(ipa, pa, size)?;
+
+        let l1 = Self::l1_index(ipa);
+        let l2 = Self::l2_index(ipa);
+
+        self.ensure_l2_table(l1)?;
+        self.ensure_l3_table(l2)?;
+
+        for offset in (0..size as u64).step_by(Self::PAGE_SIZE as usize) {
+            let cur_ipa = ipa.offset(offset);
+            let cur_pa = pa.offset(offset);
+            self.map_page(cur_ipa, cur_pa, attr)?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_page_mapping(
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+    ) -> Result<(), MapError> {
+        if !ipa.as_u64().is_multiple_of(Self::PAGE_SIZE)
+            || !pa.as_u64().is_multiple_of(Self::PAGE_SIZE)
+        {
+            return Err(MapError::UnalignedAddress);
+        }
+
+        if !(size as u64).is_multiple_of(Self::PAGE_SIZE) {
+            return Err(MapError::UnalignedSize);
+        }
+
+        let end_ipa = ipa.offset(size as u64 - 1);
+
+        let start_l1 = Self::l1_index(ipa);
+        let end_l1 = Self::l1_index(end_ipa);
+
+        if start_l1 != end_l1 {
+            return Err(MapError::CrossesL1Boundary);
+        }
+
+        let start_l2 = Self::l2_index(ipa);
+        let end_l2 = Self::l2_index(end_ipa);
+
+        if start_l2 != end_l2 {
+            return Err(MapError::CrossesL1Boundary);
+        }
+
+        Ok(())
+    }
+
+    fn ensure_l3_table(&mut self, l2_index: usize) -> Result<(), MapError> {
+        if self.l2.entry(l2_index)?.is_valid() {
+            return Ok(());
+        }
+
+        let l3_pa = self.l3.paddr().as_u64();
+        *self.l2.entry_mut(l2_index)? = Descriptor::table(l3_pa);
+
+        Ok(())
+    }
+
+    fn map_page(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        attr: MemAttr,
+    ) -> Result<(), MapError> {
+        let l3_index = Self::l3_index(ipa);
+
+        if self.l3.entry(l3_index)?.is_valid() {
+            return Err(MapError::AlreadyMapped);
+        }
+
+        *self.l3.entry_mut(l3_index)? = Descriptor::page(pa.as_u64(), attr);
+
+        Ok(())
+    }
+
     fn l1_index(ipa: IpaAddr) -> usize {
         ((ipa.as_u64() >> 30) & 0x1ff) as usize
     }
 
     fn l2_index(ipa: IpaAddr) -> usize {
         ((ipa.as_u64() >> 21) & 0x1ff) as usize
+    }
+
+    fn l3_index(ipa: IpaAddr) -> usize {
+        ((ipa.as_u64() >> 12) & 0x1ff) as usize
     }
 }
 

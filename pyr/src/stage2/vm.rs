@@ -1,6 +1,6 @@
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
-    page_table::{Building, Installed, MemAttr, Stage2Tables},
+    page_table::{Building, Installed, MapError, MemAttr, Stage2Tables},
 };
 
 use crate::stage2::scratch;
@@ -18,33 +18,31 @@ impl<S> Stage2Vm<S> {
         self.tables.root_raw()
     }
 
-    // pub fn map_guest_ram(&mut self, ipa: IpaAddr, pa: PhysAddr, size: usize) {
-    //     self.tables
-    //         .map_range(ipa, pa, Self::align_2m(size), MemAttr::Normal)
-    //         .unwrap_or_else(|_| panic_stage2_map_failed());
-    // }
-
-    fn align_2m(size: usize) -> usize {
-        const BLOCK: usize = 2 * 1024 * 1024;
+    fn align_4k(size: usize) -> usize {
+        const BLOCK: usize = 4096;
         (size + BLOCK - 1) & !(BLOCK - 1)
     }
 }
 
 impl Stage2Vm<Building> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let scratch = scratch::get_mut();
 
-        let tables =
-            Stage2Tables::new(&mut scratch.tables.root, &mut scratch.tables.l2);
+        let tables = Stage2Tables::new(
+            &mut scratch.tables.root,
+            &mut scratch.tables.l2,
+            &mut scratch.tables.l3,
+        );
 
         Self { tables }
     }
 
     pub fn map_guest_ram(&mut self, ipa: IpaAddr, pa: PhysAddr, size: usize) {
-        self.map_range(ipa, pa, Self::align_2m(size), MemAttr::Normal);
+        self.map_pages(ipa, pa, Self::align_4k(size), MemAttr::Normal);
     }
 
-    pub fn map_range(
+    pub fn map_pages(
         &mut self,
         ipa: IpaAddr,
         pa: PhysAddr,
@@ -52,8 +50,8 @@ impl Stage2Vm<Building> {
         attr: MemAttr,
     ) {
         self.tables
-            .map_range(ipa, pa, size, attr)
-            .unwrap_or_else(|_| panic_stage2_map_failed());
+            .map_pages(ipa, pa, size, attr)
+            .unwrap_or_else(|err| panic_stage2_map_failed(err));
     }
 
     pub fn install(self) -> Stage2Vm<Installed> {
@@ -71,10 +69,10 @@ impl Stage2Vm<Building> {
 
 impl Stage2Vm<Installed> {
     pub fn map_guest_ram(&mut self, ipa: IpaAddr, pa: PhysAddr, size: usize) {
-        self.map_range(ipa, pa, Self::align_2m(size), MemAttr::Normal);
+        self.map_pages(ipa, pa, Self::align_4k(size), MemAttr::Normal);
     }
 
-    pub fn map_range(
+    pub fn map_pages(
         &mut self,
         ipa: IpaAddr,
         pa: PhysAddr,
@@ -82,13 +80,13 @@ impl Stage2Vm<Installed> {
         attr: MemAttr,
     ) {
         self.tables
-            .map_range(ipa, pa, size, attr)
-            .unwrap_or_else(|_| panic_stage2_map_failed());
+            .map_pages(ipa, pa, size, attr)
+            .unwrap_or_else(|err| panic_stage2_map_failed(err));
     }
 }
 
-fn panic_stage2_map_failed() -> ! {
-    crate::log!("stage2: map_range failed");
+fn panic_stage2_map_failed(err: MapError) -> ! {
+    crate::log!("stage2: map_range failed: {err:?}");
     loop {
         core::hint::spin_loop();
     }
