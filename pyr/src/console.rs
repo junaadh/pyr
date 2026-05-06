@@ -1,35 +1,28 @@
+use crate::ActivePlatform;
 use core::fmt::{self, Write};
-
 use pyr_arch::platform::Platform;
 
-static mut EARLY_PUTC: Option<fn(u8)> = None;
+pub struct Console;
 
-pub fn init<P>()
-where
-    P: Platform,
-{
-    // SAFETY: single-core early boot only. No concurrency yet.
-    unsafe {
-        EARLY_PUTC = Some(P::early_putc);
+impl Console {
+    pub fn putc(c: char) {
+        ActivePlatform::early_putc(c as u8);
+    }
+
+    pub fn puts(s: &str) {
+        ActivePlatform::early_print(s);
     }
 }
 
-pub struct EarlyConsole;
-
-impl Write for EarlyConsole {
+impl Write for Console {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        // SAFETY: single-core early boot only. Initialised before logging
-        let putc = unsafe { EARLY_PUTC };
-
-        if let Some(putc) = putc {
-            s.bytes().for_each(putc);
-        }
+        Self::puts(s);
 
         Ok(())
     }
 }
 
 pub fn _print(args: fmt::Arguments<'_>) {
-    let mut console = EarlyConsole;
+    let mut console = Console;
     let _ = console.write_fmt(args);
 }
