@@ -69,7 +69,6 @@ where
     P: pyr_arch::platform::Platform,
 {
     P::early_init();
-    console::init::<P>();
     log!("booting");
 
     install_el2_vectors();
@@ -107,5 +106,5 @@ where
 
     stage2::enable_stage2(stage2.root_raw());
 
-    guest::enter_tiny_guest()
+    guest::tiny::enter_tiny_guest()
 }

@@ -1,42 +1,13 @@
+use core::arch::global_asm;
+
+use crate::stage2::SCRATCH;
 use pyr_arch::{
     barrier::isb,
     exception::eret,
-    sysregs::{ElrEl2, SpsrEl2, sp_el1::SpEl1},
+    sysregs::{ElrEl2, SpEl1, SpsrEl2},
 };
 
-use crate::stage2::SCRATCH;
-
-core::arch::global_asm!(
-    r#"
-    .section .text.guest, "ax"
-    .align 4
-    .global __tiny_guest_entry
-
-__tiny_guest_entry:
-    mov x0, #0x7079
-    mov x1, #1
-    mov x2, #'A'
-    hvc #0x0
-
-    mov x0, #0x7079
-    mov x1, #1
-    mov x2, #'B'
-    hvc #0x0
-    
-    mov x3, #0x09000000
-    mov w4, #'X'
-    strb w4, [x3]
-
-    mov x0, #0x7079
-    mov x1, #1
-    mov x2, #'Z'
-    hvc #0x0
-
-1:
-    wfe
-    b 1b
-    "#
-);
+global_asm!(include_str!("tiny.S"));
 
 unsafe extern "C" {
     fn __tiny_guest_entry() -> !;
