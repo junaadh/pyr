@@ -1,9 +1,9 @@
 mod resume;
 
-use crate::hearth;
+use crate::{hearth, mmio};
 use pyr_arch::{
     exception::{ExceptionClass, TrapFrame},
-    sysregs::{EsrEl2, FarEl2, HpfarEl2},
+    sysregs::EsrEl2,
 };
 pub use resume::*;
 
@@ -22,32 +22,7 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
             hearth::handle_hvc(frame, imm16)
         }
         ExceptionClass::DataAbortLower { iss } => {
-            let far = FarEl2::mrs();
-            let hpfar = HpfarEl2::mrs();
-
-            crate::log!("trap = DataAbortLower");
-
-            let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
-            crate::log!("fault IPA = {ipa:#018x}");
-
-            if iss.wnr && iss.sas == 0 && ipa == 0x0900_0000 {
-                let reg = iss.srt as usize;
-
-                if let Some(byte) = frame.x.get(reg) {
-                    let byte = *byte as u8;
-
-                    crate::log!("mmio: PL011 write byte {}", byte as char);
-                    crate::print!("{}", byte as char);
-
-                    Resume::AdvancePcAndReturn
-                } else {
-                    crate::log!("invalid syndrome register: {reg}");
-                    Resume::Halt
-                }
-            } else {
-                crate::log!("unhandled data abort");
-                Resume::Halt
-            }
+            mmio::handle_data_abort(frame, iss)
         }
         other => {
             crate::log!("unhandled trap: {other:?}");

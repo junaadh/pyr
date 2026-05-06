@@ -5,6 +5,7 @@
 pub mod console;
 pub mod guest;
 pub mod hearth;
+pub mod mmio;
 pub mod stage2;
 pub mod trap;
 
@@ -20,7 +21,7 @@ use pyr_arch::{
 use pyr_platform_qemu::QemuVirt;
 
 #[cfg(feature = "platform-qemu-virt")]
-type ActivePlatform = QemuVirt;
+pub(crate) type ActivePlatform = QemuVirt;
 
 #[macro_export]
 macro_rules! print {
