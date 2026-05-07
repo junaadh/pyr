@@ -1,74 +1,107 @@
 # pyr
 
-`pyr` is an experimental, early-stage type-1 hypervisor for ARMv8-A written in `no_std` Rust.
+`pyr` is an experimental type-1 hypervisor bring-up project for ARMv8-A, written in `no_std` Rust.
 
-The current codebase focuses on booting at EL2 on QEMU's AArch64 `virt` machine, installing an EL2 exception vector table, enabling a minimal stage-2 translation setup, and entering a tiny in-tree EL1 guest. The long-term direction is to grow this into a hypervisor capable of running Linux guests, but the current implementation is still a small bring-up environment rather than a production VMM.
-
-This README is based on the repository's tracked and non-gitignored files only.
+The current working path is bare-metal QEMU `virt` on AArch64. The Linux boot path now reaches the guest debug console. UEFI paths are currently not working and should not be treated as the main development path until the bare-metal Linux flow is solid.
 
 ## Current Status
 
-The project currently provides:
+Working or actively developed:
 
-- A Rust workspace with four `no_std` crates: `pyr-arch`, `pyr-platform-qemu`, `pyr`, and `ember`.
-- QEMU `virt` platform support with early PL011 UART output at physical address `0x0900_0000`.
-- A UEFI boot path through `ember`, producing an `aarch64-unknown-uefi` EFI binary.
-- A bare-metal `pyr` entry point for `aarch64-unknown-none`.
-- ARMv8-A address wrappers, synchronization barriers, EL2 system register wrappers, and exception helpers.
-- An EL2 vector table implemented in assembly and installed through `VBAR_EL2`.
-- Minimal stage-2 page table construction using 4 KiB tables and 2 MiB block descriptors.
-- A 1 GiB identity map for QEMU RAM starting at `0x4000_0000`.
-- A tiny EL1 guest assembled into the hypervisor image.
-- Basic trap handling for HVC calls and a narrow PL011 MMIO write emulation path.
-- A small internal HVC ABI named `hearth` for debug-console output.
+- Bare-metal QEMU `virt` boot through `aarch64-unknown-none`.
+- EL3-to-EL2 transition when QEMU starts the image in secure mode.
+- EL2 initialization, exception vector installation, and early PL011 UART logging.
+- Feature-selected guest boot modes: `boot-linux` and `boot-tiny`.
+- Linux Image header parsing and embedded Linux image loading.
+- Embedded QEMU `virt` DTB loading.
+- Guest RAM staging through Pyr-owned scratch memory.
+- Stage-2 mappings for the current single-VM guest RAM window.
+- EL1 guest launch with Linux boot arguments in `x0..x3`.
+- Basic HVC handling, including PSCI calls used by Linux.
+- Debug-console output from the guest.
 
-Notable current limitations:
+Known limitations:
 
-- Only QEMU `virt` is implemented as a concrete platform.
-- The guest is a tiny in-tree assembly routine, not Linux.
-- Stage-2 mapping is static, identity-mapped, and limited to the current early boot use case.
-- Most exception vector entries halt in a `wfe` loop; only lower EL AArch64 synchronous exceptions are dispatched into Rust.
-- There is no allocator, scheduler, device model, vCPU abstraction, guest loader, or persistent configuration layer yet.
-- There are no test files in the current non-gitignored source tree.
+- UEFI boot scripts and UEFI ELF handoff are currently broken or stale.
+- Development priority is bare-metal Linux first, then UEFI/ELF functionality later.
+- Linux and DTB are embedded with `include_bytes!`; there is no runtime loader or disk-backed configuration yet.
+- Only QEMU `virt` is implemented as a platform.
+- Only one guest is supported.
+- Stage-2 setup is static and prototype-oriented.
+- Device emulation is minimal.
+- There is no allocator, scheduler, vCPU abstraction, persistent config layer, or production-grade device model.
+
+## Quick Start
+
+Boot the current bare-metal Linux path:
+
+```sh
+./scripts/run-qemu-bare-linux
+```
+
+This builds `pyr` for `aarch64-unknown-none`, converts the ELF to a flat binary, and boots it with QEMU using `-kernel target/pyr-bare.bin`.
+
+You should see Pyr EL2 logs followed by Linux guest/debug-console output.
+
+The tiny guest path is still available for low-level smoke testing:
+
+```sh
+./scripts/run-qemu-bare
+```
+
+Avoid using the UEFI scripts for now:
+
+```sh
+./scripts/run-qemu-uefi
+./scripts/run-qemu-uefi-linux
+```
+
+They are kept in-tree, but the current focus is getting the bare-metal Linux path correct before restoring UEFI ELF functionality.
+
+## Requirements
+
+- Rust nightly from `rust-toolchain.toml`.
+- `qemu-system-aarch64`.
+- `rust-src`, `llvm-tools-preview`, `clippy`, `rustfmt`, and `rust-analyzer`, installed by the pinned toolchain.
+- Targets from `rust-toolchain.toml`: `aarch64-unknown-none` and `aarch64-unknown-uefi`.
+
+The UEFI scripts also assume EDK2 firmware at `/opt/homebrew/share/qemu/edk2-aarch64-code.fd`, but those scripts are not the supported path right now.
 
 ## Repository Layout
 
 ```text
 .
 |-- Cargo.toml                 # Workspace manifest and shared lint/profile settings
-|-- Cargo.lock                 # Lockfile for the local workspace crates
-|-- rust-toolchain.toml        # Nightly toolchain, components, and AArch64 targets
-|-- .cargo/config.toml         # Target rustflags and linker script for bare-metal builds
-|-- arch/                      # `pyr-arch`: ARMv8-A architecture support
-|-- ember/                     # `ember`: UEFI entry crate that jumps into `pyr`
-|-- platform/qemu/             # `pyr-platform-qemu`: QEMU virt platform support
-|-- pyr/                       # `pyr`: hypervisor runtime, traps, guest, stage-2 setup
-`-- scripts/run-qemu-uefi      # Builds the UEFI image and boots it in QEMU
+|-- Cargo.lock                 # Workspace lockfile
+|-- rust-toolchain.toml        # Pinned nightly toolchain and AArch64 targets
+|-- .cargo/config.toml         # Target rustflags and bare-metal linker script
+|-- arch/                      # pyr-arch: ARMv8-A primitives and page-table support
+|-- ember/                     # ember: UEFI entry crate, currently not the main path
+|-- platform/qemu/             # pyr-platform-qemu: QEMU virt platform support
+|-- pyr/                       # pyr: hypervisor runtime, boot code, guest loading, traps
+`-- scripts/                   # QEMU helper scripts
 ```
 
-Ignored/generated paths include `target/`, `esp/`, `generated/`, `.venv/`, `docs/DDI0487F_a_armv8_arm.pdf`, `armv8-book/`, and `**/*.py` according to `.gitignore`. The QEMU run script creates `esp/EFI/BOOT/BOOTAA64.EFI` as a generated boot artifact.
+Important generated or local paths:
+
+- `target/` contains Cargo build outputs.
+- `target/pyr-bare.bin` is generated by the bare-metal run scripts.
+- `esp/` is generated by the UEFI scripts.
+- `pyr/assets/img` is the embedded Linux image used by `boot-linux`.
+- `pyr/assets/qemu-virt.dtb` is the embedded DTB used by `boot-linux` and `boot-tiny`.
 
 ## Workspace
 
-The root `Cargo.toml` defines a Rust 2024 workspace:
-
-| Crate | Package name | Purpose |
+| Crate | Package | Purpose |
 | --- | --- | --- |
-| `arch/` | `pyr-arch` | Architecture-level ARMv8-A primitives shared by the hypervisor and platform crates. |
-| `platform/qemu/` | `pyr-platform-qemu` | QEMU `virt` platform implementation, currently early UART output. |
-| `pyr/` | `pyr` | Core hypervisor runtime and bare-metal entry point. |
-| `ember/` | `ember` | UEFI entry point that calls into `pyr`. |
+| `arch/` | `pyr-arch` | ARMv8-A address types, barriers, exceptions, system registers, and page-table primitives. |
+| `platform/qemu/` | `pyr-platform-qemu` | QEMU `virt` platform implementation and PL011 early UART output. |
+| `pyr/` | `pyr` | Bare-metal hypervisor runtime, EL2 boot, guest loading, stage-2 setup, and trap handling. |
+| `ember/` | `ember` | UEFI entry wrapper that calls into `pyr`; currently not working as the primary boot path. |
 
-The workspace uses only local crates. `Cargo.lock` contains no third-party dependencies.
+The workspace uses local crates only. Profiles use `panic = "abort"`; release builds enable LTO, one codegen unit, size optimization, and symbol stripping.
 
-Shared package metadata:
-
-- Version: `0.1.0`
-- Edition: `2024`
-- License: `MIT OR Apache-2.0`
-- Repository: `https://github.com/junaadh/pyr.git`
-
-Shared lint policy in `Cargo.toml`:
+Shared lint policy includes:
 
 - `unsafe_op_in_unsafe_fn = "deny"`
 - `clippy::undocumented_unsafe_blocks = "deny"`
@@ -76,71 +109,36 @@ Shared lint policy in `Cargo.toml`:
 - `clippy::expect_used = "deny"`
 - `clippy::indexing_slicing = "deny"`
 
-Both dev and release profiles set `panic = "abort"`. The release profile also enables LTO, uses one codegen unit, optimizes for size, and strips symbols.
+## Build Commands
 
-## Toolchain
-
-`rust-toolchain.toml` pins the project to nightly Rust and installs:
-
-- Components: `rust-src`, `llvm-tools-preview`, `clippy`, `rustfmt`, `rust-analyzer`
-- Targets: `aarch64-unknown-none`, `aarch64-unknown-uefi`
-
-The project is intended to be built with `cargo +nightly`, although `rust-toolchain.toml` should select nightly automatically when commands are run from the repository root.
-
-## Requirements
-
-To run the current QEMU UEFI path, install:
-
-- Rust nightly with the targets from `rust-toolchain.toml`
-- `qemu-system-aarch64`
-- AArch64 EDK2 firmware
-
-The run script currently expects firmware at:
+Build the bare-metal Linux path:
 
 ```sh
-/opt/homebrew/share/qemu/edk2-aarch64-code.fd
+cargo +nightly build -p pyr --target aarch64-unknown-none --release --features "platform-qemu-virt boot-linux"
 ```
 
-If your firmware is located elsewhere, update `FIRMWARE` in `scripts/run-qemu-uefi`.
-
-## Quick Start
-
-Boot the UEFI image in QEMU:
+Build the bare-metal tiny guest path:
 
 ```sh
-./scripts/run-qemu-uefi
+cargo +nightly build -p pyr --target aarch64-unknown-none --release --features "platform-qemu-virt boot-tiny"
 ```
 
-The script performs these steps:
-
-1. Builds `ember` for `aarch64-unknown-uefi` in release mode with `platform-qemu-virt` enabled.
-2. Creates the generated EFI system partition directory at `esp/EFI/BOOT`.
-3. Copies `target/aarch64-unknown-uefi/release/ember.efi` to `esp/EFI/BOOT/BOOTAA64.EFI`.
-4. Starts `qemu-system-aarch64` with `-machine virt,virtualization=on`, `-cpu cortex-a72`, `-m 1024M`, `-nographic`, EDK2 firmware, and the FAT ESP directory attached as a virtio block device.
-
-## Build And Check Commands
-
-Check the UEFI boot crate:
+Check the Linux path:
 
 ```sh
-cargo +nightly check -p ember --target aarch64-unknown-uefi --features platform-qemu-virt
+cargo +nightly check -p pyr --target aarch64-unknown-none --features "platform-qemu-virt boot-linux"
 ```
 
-Check the bare-metal hypervisor crate:
+Check the tiny guest path:
 
 ```sh
-cargo +nightly check -p pyr --target aarch64-unknown-none
+cargo +nightly check -p pyr --target aarch64-unknown-none --features "platform-qemu-virt boot-tiny"
 ```
 
-Check the architecture crate:
+Check support crates:
 
 ```sh
 cargo +nightly check -p pyr-arch --target aarch64-unknown-none
-```
-
-Check the QEMU platform crate:
-
-```sh
 cargo +nightly check -p pyr-platform-qemu --target aarch64-unknown-none
 ```
 
@@ -150,278 +148,78 @@ Format the workspace:
 cargo +nightly fmt
 ```
 
-Run clippy for the bare-metal hypervisor path:
+Do not run `cargo check -p pyr --target aarch64-unknown-none` without a boot feature. `boot-linux` and `boot-tiny` are mutually exclusive, and one of them must be selected.
 
-```sh
-cargo +nightly clippy -p pyr --target aarch64-unknown-none
-```
-
-## Boot Flow
-
-The current QEMU UEFI flow is:
+## Bare-Metal Linux Boot Flow
 
 ```text
-scripts/run-qemu-uefi
-  -> cargo builds `ember.efi`
-  -> QEMU starts EDK2 firmware
-  -> EDK2 launches `EFI/BOOT/BOOTAA64.EFI`
-  -> ember::efi_main()
-  -> pyr::pyr_entry()
-  -> pyr::<QemuVirt>()
-  -> QemuVirt early console init
-  -> install EL2 vectors in VBAR_EL2
-  -> inspect CurrentEL, HCR_EL2, SCTLR_EL2, VTCR_EL2, VTTBR_EL2
-  -> configure HCR_EL2 for an AArch64 EL1 guest
-  -> build a static stage-2 identity map
-  -> enable stage-2 translation through VTCR_EL2, VTTBR_EL2, HCR_EL2.VM
-  -> enter the tiny EL1 guest with ERET
+scripts/run-qemu-bare-linux
+  -> cargo builds pyr for aarch64-unknown-none with boot-linux
+  -> rust-objcopy converts the ELF to target/pyr-bare.bin
+  -> QEMU starts the flat image with -kernel
+  -> start.S clears BSS and enters pyr_bare_entry()
+  -> boot::enter() detects the current exception level
+  -> if needed, EL3 transitions to EL2
+  -> boot::el2::pyr_entry()
+  -> init_el2()
+  -> load embedded Linux Image and DTB
+  -> copy them into scratch-backed guest RAM
+  -> build and install stage-2 mappings
+  -> enter EL1 with Linux boot arguments
+  -> Linux reaches debug-console output
 ```
 
-The UEFI crate `ember` defines `efi_main` with the `efiapi` ABI and immediately calls `pyr_entry()`. The bare-metal `pyr` binary defines `_start()` and also calls `pyr_entry()`.
+Current Linux boot inputs are embedded at compile time:
 
-## Runtime Flow
+- Linux image: `pyr/assets/img`
+- DTB: `pyr/assets/qemu-virt.dtb`
 
-The main hypervisor runtime is `pyr::pyr<P>()`, where `P` implements `pyr_arch::platform::Platform`.
+## Guest Memory
 
-The default feature is `platform-qemu-virt`, which selects `pyr_platform_qemu::QemuVirt` as the active platform.
+The current single-VM prototype uses this guest-visible layout:
 
-At startup, `pyr`:
-
-1. Calls `P::early_init()`.
-2. Initializes the early console with `P::early_putc`.
-3. Installs EL2 exception vectors.
-4. Logs key EL2 registers.
-5. Updates `HCR_EL2` to clear `TGE` and `E2H`, set `RW`, and route physical IRQ, FIQ, and SError to EL2.
-6. Builds the stage-2 page tables.
-7. Enables stage-2 translation.
-8. Enters the tiny guest at EL1h with DAIF masked.
-
-## Crate Details
-
-### `pyr-arch`
-
-`pyr-arch` is a `no_std` architecture support crate.
-
-Main modules:
-
-| Module | Contents |
+| IPA | Purpose |
 | --- | --- |
-| `addr` | Transparent wrappers for physical addresses, virtual addresses, and intermediate physical addresses. |
-| `barrier` | `isb`, `dsb ish`, and `dmb ish` wrappers using inline assembly. |
-| `exception` | Exception classes, trap frame layout, `eret`, and EL2 vector installation. |
-| `page` | Page constants for 4 KiB pages and 512-entry translation tables. |
-| `page_table` | Stage-2 descriptor and page table construction helpers. |
-| `platform` | The `Platform` trait used by `pyr` for early platform operations. |
-| `sysregs` | Typed wrappers for ARM EL2 system registers used by the hypervisor. |
+| `0x4000_0000` | Guest RAM base and Linux kernel load IPA. |
+| `0x7f00_0000` | DTB IPA passed to Linux in `x0`. |
+| `0x7ff0_0000` | Initial guest stack top IPA. |
 
-Address wrappers:
+Guest RAM is backed by Pyr scratch storage and mapped through stage-2 translation. Device IPAs such as the QEMU PL011 UART at `0x0900_0000` remain outside the normal RAM window when EL2 needs traps or emulation.
 
-- `PhysAddr`: physical address wrapper with `new`, `as_u64`, `offset`, `align_down`, and `align_up`.
-- `IpaAddr`: intermediate physical address wrapper with `new`, `as_u64`, `offset`, `align_down`, and `align_up`.
-- `VirtAddr`: virtual address wrapper with `new` and `as_u64`.
+## Boot Features
 
-System register wrappers currently cover:
-
-- `CurrentEl`
-- `ElrEl2`
-- `EsrEl2`
-- `FarEl2`
-- `HcrEl2`
-- `HpfarEl2`
-- `SctlrEl2`
-- `SpEl1`
-- `SpsrEl2`
-- `VbarEl2`
-- `VtcrEl2`
-- `VttbrEl2`
-
-### `pyr-platform-qemu`
-
-`pyr-platform-qemu` defines `QemuVirt`, the only concrete platform currently implemented.
-
-`QemuVirt` implements `pyr_arch::platform::Platform`:
-
-- `early_init()` is currently empty.
-- `early_putc(byte)` writes one byte to the QEMU `virt` PL011 UART MMIO base at physical address `0x0900_0000` with `write_volatile`.
-
-### `pyr`
-
-`pyr` contains the core hypervisor runtime.
-
-Main modules:
-
-| Module | Purpose |
+| Feature | Purpose |
 | --- | --- |
-| `console` | Global early console callback and `core::fmt::Write` adapter. |
-| `guest` | Tiny in-tree EL1 guest and EL1 entry setup. |
-| `hearth` | Internal HVC ABI dispatch and debug console capability checks. |
-| `stage2` | Static stage-2 table storage, identity map construction, and stage-2 enablement. |
-| `trap` | Lower EL AArch64 synchronous trap handler. |
+| `platform-qemu-virt` | Selects QEMU `virt` platform support. |
+| `boot-linux` | Builds the Linux guest boot path. |
+| `boot-tiny` | Builds the tiny in-tree guest boot path. |
 
-The crate exports logging macros:
+`boot-linux` and `boot-tiny` cannot be enabled together.
 
-- `print!`
-- `println!`
-- `debug!`
-- `log!`
+The `pyr` crate default feature only selects the platform. A boot feature is still required for usable builds.
 
-`pyr/src/main.rs` provides a `no_std`, `no_main` bare-metal `_start()` that calls `pyr::pyr_entry()`. Its panic handler prints `[pyr] panic` and spins.
+## Trap Handling
 
-### `ember`
+The EL2 vector table dispatches lower-EL AArch64 synchronous exceptions into Rust.
 
-`ember` is a `no_std`, `no_main` UEFI entry crate.
+Handled cases include:
 
-It defines:
-
-```rust
-pub extern "efiapi" fn efi_main(_image: Handle, _st: SytemTable) -> usize
-```
-
-`efi_main` calls `pyr_entry()` and never returns in normal operation. The panic handler spins.
-
-## Stage-2 Translation
-
-Stage-2 page table support lives in `arch/src/page_table` and `pyr/src/stage2.rs`.
-
-Current model:
-
-- Tables are 4 KiB aligned and contain 512 descriptors.
-- `Descriptor::table(addr)` creates valid table descriptors.
-- `Descriptor::block(addr, attr)` creates stage-2 block descriptors.
-- Block descriptors currently set full access, inner shareable, access flag, and an attribute index.
-- `MemAttr::Normal` uses attribute index `0`.
-- `MemAttr::Device` uses attribute index `1`.
-- `Stage2Tables<Building>` enforces a build state before producing `Stage2Tables<Built>`.
-- `map_range` maps 2 MiB blocks and rejects unaligned addresses, unaligned sizes, out-of-range L1 spans, and duplicate mappings.
-
-The current hypervisor creates a statically allocated `BootScratch` area with:
-
-- One root page table.
-- One L2 page table.
-- One 4 KiB guard area.
-- One 16 KiB guest stack.
-
-`build_identity_map()` maps the first 1 GiB of QEMU RAM:
-
-| IPA | PA | Size | Attribute |
-| --- | --- | --- | --- |
-| `0x4000_0000` | `0x4000_0000` | `1024 * 1024 * 1024` | `Normal` |
-
-`enable_stage2(root_pa)` configures:
-
-- `VTCR_EL2.T0SZ = 25`
-- `VTCR_EL2.SL0` for level 1 start with a 4 KiB granule
-- `VTCR_EL2.TG0 = 4 KiB`
-- `VTCR_EL2.SH0 = inner shareable`
-- `VTCR_EL2.ORGN0 = write-back read/write allocate`
-- `VTCR_EL2.IRGN0 = write-back read/write allocate`
-- `VTTBR_EL2` with the root table base address
-- `HCR_EL2.VM = 1`
-
-## Tiny Guest
-
-The tiny guest is assembled in `pyr/src/guest.rs` as `__tiny_guest_entry`.
-
-Guest behavior:
-
-1. Calls `hvc #0` with extension `0x7079`, function `1`, and byte `'A'`.
-2. Calls `hvc #0` with extension `0x7079`, function `1`, and byte `'B'`.
-3. Writes byte `'X'` directly to IPA `0x0900_0000`, the QEMU PL011 UART address.
-4. Calls `hvc #0` with extension `0x7079`, function `1`, and byte `'Z'`.
-5. Enters a `wfe` loop.
-
-`enter_tiny_guest()` sets:
-
-- `ELR_EL2` to the tiny guest entry symbol.
-- `SP_EL1` to the top of the 16 KiB scratch guest stack.
-- `SPSR_EL2` to EL1h with DAIF masked.
-
-It then executes `eret` to enter the guest.
-
-## Exceptions And Trap Handling
-
-`arch/src/exception/vectors.S` defines the EL2 vector table.
-
-Only the lower EL AArch64 synchronous vector currently saves state into a `TrapFrame` and calls Rust:
-
-```text
-pyr_sync_lower_el64(&mut TrapFrame)
-```
-
-The trap frame stores:
-
-- `x0..x30`
-- `ELR_EL2`
-- `SPSR_EL2`
-
-`pyr/src/trap/mod.rs` reads and decodes `ESR_EL2`.
-
-Handled cases:
-
-| Exception | Behavior |
+| Trap | Current behavior |
 | --- | --- |
-| HVC64 | Dispatches to `hearth::handle_hvc` and returns to the guest on success. |
-| DataAbortLower | If it is an 8-bit write to IPA `0x0900_0000`, prints the guest byte, advances `ELR_EL2` by 4, and returns. |
+| HVC64 PSCI_VERSION | Returns PSCI 1.0. |
+| HVC64 PSCI_CPU_ON | Returns `NOT_SUPPORTED` for the single-CPU prototype. |
+| HVC64 PSCI_SYSTEM_OFF | Logs and halts. |
+| HVC64 PSCI_SYSTEM_RESET | Logs and halts. |
+| Hearth debug-console HVC | Prints guest bytes to the host console. |
+| Data abort lower EL | Routes through the current MMIO handling path. |
 
-Unhandled traps log the decoded class and halt in a spin loop. Most vector table entries that are not wired to Rust halt in `wfe` loops.
+Unhandled traps are logged and halt the system.
 
-## Hearth HVC ABI
+## UEFI Status
 
-`hearth` is the current internal hypercall dispatch layer.
+`ember` still exists as the UEFI entry crate, and the scripts under `scripts/run-qemu-uefi*` still build/copy an EFI binary into `esp/EFI/BOOT/BOOTAA64.EFI`.
 
-The HVC call format is read from the saved guest registers:
-
-| Register | Meaning |
-| --- | --- |
-| `x0` | Extension ID |
-| `x1` | Function ID |
-| `x2` | Argument 0 |
-| `x3` | Argument 1 |
-| `x4` | Argument 2 |
-
-The only implemented extension is debug console:
-
-| Name | Value |
-| --- | --- |
-| Extension ID | `0x7079` |
-| Function ID `Putc` | `0x0001` |
-
-`DebugConsole::Putc` requires `Scope::GuestConsoleWrite`. The current dispatcher grants `CapSet::debug_guest()`, which allows guest console writes.
-
-Return and error behavior:
-
-- On success, `x0` is set to `0` and the guest resumes.
-- Unknown extension returns error code `1` and halts.
-- Unknown function returns error code `2` and halts.
-- Permission denied returns error code `3` and halts.
-
-## Memory Map And Important Addresses
-
-| Address | Use |
-| --- | --- |
-| `0x0900_0000` | QEMU `virt` PL011 UART MMIO base. |
-| `0x4000_0000` | QEMU `virt` RAM base used by the stage-2 identity map. |
-| `0x4008_0000` | Bare-metal `pyr` image link address from `platform/qemu/pyr.link.ld`. |
-
-The linker script for `aarch64-unknown-none` is configured by `.cargo/config.toml` and points at `platform/qemu/pyr.link.ld`. It defines `_start` as the entry point, places `.text`, `.rodata`, `.data`, and `.bss` from `0x40080000`, and exposes `__bss_start`, `__bss_end`, and `__image_end` symbols.
-
-## Features
-
-The `pyr` and `ember` crates define the same platform feature:
-
-| Feature | Default | Effect |
-| --- | --- | --- |
-| `platform-qemu-virt` | Yes | Enables the optional `pyr-platform-qemu` dependency and selects QEMU `virt` support. |
-
-## Development Notes
-
-- The codebase is intentionally `no_std`.
-- The UEFI path is `no_main` through `ember::efi_main`.
-- The bare-metal path is `no_main` through `pyr::_start`.
-- Unsafe blocks are documented and `unsafe_op_in_unsafe_fn` is denied.
-- Early console state is a single global callback and is documented as single-core early boot only.
-- The platform abstraction is intentionally small: `early_init`, `early_putc`, and default `early_print`.
-- Generated QEMU boot files are written under ignored `esp/`.
+That path is not currently functional. Treat UEFI support and UEFI ELF loading as future work after the bare-metal Linux path is stable.
 
 ## License
 
