@@ -67,6 +67,15 @@ mkdir -p "$(dirname "$OUT")"
 ) > "$OUT"
 
 SIZE="$(stat -f%z "$OUT")"
+END=$((0x78000000 + SIZE))
+
 printf "built %s (%s bytes)\n" "$OUT" "$SIZE"
 printf "initrd-start = 0x%x\n" 0x78000000
-printf "initrd-end   = 0x%x\n" $((0x78000000 + SIZE))
+printf "initrd-end   = 0x%x\n" "$END"
+
+sed "s/__INITRD_END__/$(printf '0x%x' "$END")/" \
+  pyr/assets/qemu-virt.dts.in > pyr/assets/qemu-virt.dts
+
+dtc -I dts -O dtb \
+  -o pyr/assets/qemu-virt.dtb \
+  pyr/assets/qemu-virt.dts
