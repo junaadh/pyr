@@ -4,6 +4,7 @@
 
 pub mod addr;
 pub mod barrier;
+pub mod boot;
 pub mod exception;
 pub mod page;
 pub mod page_table;

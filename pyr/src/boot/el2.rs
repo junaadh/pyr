@@ -1,9 +1,10 @@
 mod linux;
 mod tiny;
 
-use crate::{ActivePlatform, log};
+use crate::{ActivePlatform, fatal, log};
 use pyr_arch::{
     barrier::isb,
+    boot::{abi::RawBootInfo, info::BootInfo},
     exception::install_el2_vectors,
     platform::Platform,
     sysregs::{
@@ -15,23 +16,75 @@ use pyr_arch::{
 #[cfg(all(feature = "boot-tiny", feature = "boot-linux"))]
 compile_error!("Only one feature can be active at the same time");
 
-#[cfg(not(any(feature = "boot-tiny", feature = "boot-linux")))]
-compile_error!("One feature needs to be activated");
+/// # Safety
+///
+/// `raw` must satisfy the RawBootInfo ABI contract:
+///
+/// - `raw` is non-null and properly aligned
+/// - `raw` points to a valid `RawBootInfo` structure
+/// - all embedded pointers (`memory_map_ptr`, `modules_ptr`, etc)
+///   are valid for reads for the specified lengths
+/// - all referenced memory remains alive for the lifetime of this call
+/// - the bootloader / firmware constructed the structure according to
+///   `PYR_BOOT_VERSION` semantics
+///
+/// This function is the single unsafe ABI boundary between external
+/// boot environments (Ember, UEFI, QEMU trampoline, tests) and Pyr's
+/// internal safe Rust boot model.
+pub unsafe fn pyr_el2_entry_raw(raw: *const RawBootInfo) -> ! {
+    // SAFETY:
+    //
+    // The caller guarantees that `raw` satisfies the RawBootInfo ABI
+    // invariants documented above. `from_raw_ptr` validates:
+    //
+    // - magic
+    // - version
+    // - structure size
+    // - slice bounds
+    // - enum discriminants
+    // - UTF-8 command lines / module names
+    //
+    // and converts the raw ABI representation into a validated safe
+    // `BootInfo<'_>` view.
+    let boot_info =
+        unsafe { BootInfo::from_raw_ptr(raw) }.unwrap_or_else(|err| {
+            fatal!("could not parse RawBootInfo into BootInfo: {err:?}")
+        });
 
-#[unsafe(no_mangle)]
-pub extern "C" fn pyr_entry() -> ! {
-    init_el2();
+    pyr_el2_entry(boot_info)
+}
+
+fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
+    init_el2(&boot_info);
 
     #[cfg(feature = "boot-linux")]
     {
         use crate::boot::el2::linux::boot_linux;
 
-        static LINUX_IMAGE: &[u8] = include_bytes!("../../assets/img");
-        static DTB: &[u8] = include_bytes!("../../assets/qemu-virt.dtb");
-        static INITRD: Option<&[u8]> =
-            Some(include_bytes!("../../assets/initramfs.cpio"));
+        let kernel = boot_info
+            .kernel()
+            .unwrap_or_else(|| fatal!("BootInfo missing Linux kernel module"));
 
-        boot_linux(LINUX_IMAGE, DTB, INITRD)
+        let dtb = boot_info
+            .dtb()
+            .unwrap_or_else(|| fatal!("BootInfo missing DTB module"));
+
+        let initrd = boot_info.initrd().map(|m| m.data());
+
+        // SAFETY:
+        //
+        // `boot_linux` assumes:
+        //
+        // - kernel image bytes are a valid AArch64 Linux Image
+        // - DTB bytes are a valid flattened device tree blob
+        // - initrd bytes (if present) remain alive during guest setup
+        // - the stage-2 mapper will establish the required guest-visible
+        //   mappings before entering EL1
+        //
+        // These invariants are upheld by the validated BootInfo module
+        // model and the boot artifact construction performed by the
+        // bootloader / bare-metal trampoline.
+        boot_linux(kernel.data(), dtb.data(), initrd)
     }
 
     #[cfg(feature = "boot-tiny")]
@@ -40,9 +93,12 @@ pub extern "C" fn pyr_entry() -> ! {
     }
 }
 
-pub fn init_el2() {
+fn init_el2(boot_info: &BootInfo<'_>) {
     <ActivePlatform as Platform>::early_init();
     log!("booting");
+    log!("boot source = {:?}", boot_info.boot_source());
+    log!("machine     = {:?}", boot_info.machine());
+    log!("entry EL    = {:?}", boot_info.entry_el());
 
     install_el2_vectors();
 
