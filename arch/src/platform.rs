@@ -56,6 +56,11 @@ pub fn write_back_read_value(
     }
 
     let reg = iss.srt as usize;
+
+    if reg == 31 {
+        return Ok(());
+    }
+
     let slot = frame
         .x
         .get_mut(reg)
@@ -78,6 +83,10 @@ pub fn read_guest_register(
 ) -> Result<u64, MmioDeviceError> {
     if !iss.isv {
         return Err(MmioDeviceError::UnsupportedAccess);
+    }
+
+    if iss.srt == 31 {
+        return Ok(0);
     }
 
     frame
