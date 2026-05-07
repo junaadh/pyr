@@ -6,10 +6,10 @@ pub enum ExceptionClass {
     SysregTrap { iss: u32 },
     WfiWfe,
     Unknown { ec: u8, iss: u32 },
+    Smc64 { imm16: u16 },
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-
 pub struct DataAbortIss {
     pub raw: u32,
     pub dfsc: u8,

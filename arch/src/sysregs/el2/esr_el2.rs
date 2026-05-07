@@ -44,6 +44,9 @@ impl EsrEl2 {
             0x16 => ExceptionClass::Hvc64 {
                 imm16: (iss & 0xffff) as u16,
             },
+            0x17 => ExceptionClass::Smc64 {
+                imm16: (iss & 0xffff) as u16,
+            },
             0x24 => ExceptionClass::DataAbortLower {
                 iss: DataAbortIss::decode(iss),
             },

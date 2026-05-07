@@ -24,6 +24,7 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
         ExceptionClass::DataAbortLower { iss } => {
             mmio::handle_data_abort(frame, iss)
         }
+
         other => {
             crate::log!("unhandled trap: {other:?}");
             Resume::Halt
