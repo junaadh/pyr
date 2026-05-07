@@ -2,7 +2,10 @@ use crate::{
     guest::region::GuestRegion,
     stage2::{Stage2Vm, scratch},
 };
-use pyr_arch::addr::{IpaAddr, PhysAddr};
+use pyr_arch::{
+    addr::{IpaAddr, PhysAddr},
+    page_table::MapError,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum GuestMemoryError {
@@ -83,11 +86,14 @@ impl GuestMemory {
         Self::STACK_TOP_IPA.as_u64()
     }
 
-    pub fn map_region<S>(stage2: &mut Stage2Vm<S>, region: GuestRegion)
+    pub fn map_region<S>(
+        stage2: &mut Stage2Vm<S>,
+        region: GuestRegion,
+    ) -> Result<(), MapError>
     where
         Stage2Vm<S>: MapGuestRegion,
     {
-        stage2.map_guest_region(region);
+        stage2.map_guest_region(region)
     }
 
     fn copy_into_guest_ram(
@@ -140,5 +146,6 @@ impl GuestMemory {
 }
 
 pub trait MapGuestRegion {
-    fn map_guest_region(&mut self, region: GuestRegion);
+    fn map_guest_region(&mut self, region: GuestRegion)
+    -> Result<(), MapError>;
 }

@@ -50,8 +50,13 @@ impl Stage2Vm<Building> {
         Self { tables }
     }
 
-    pub fn map_guest_ram(&mut self, ipa: IpaAddr, pa: PhysAddr, size: usize) {
-        self.map_pages(ipa, pa, Self::align_4k(size), MemAttr::Normal);
+    pub fn map_guest_ram(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+    ) -> Result<(), MapError> {
+        self.map_pages(ipa, pa, Self::align_4k(size), MemAttr::Normal)
     }
 
     pub fn map_pages(
@@ -60,10 +65,8 @@ impl Stage2Vm<Building> {
         pa: PhysAddr,
         size: usize,
         attr: MemAttr,
-    ) {
-        self.tables
-            .map_pages(ipa, pa, size, attr)
-            .unwrap_or_else(|err| panic_stage2_map_failed(err));
+    ) -> Result<(), MapError> {
+        self.tables.map_pages(ipa, pa, size, attr)
     }
 
     pub fn install(self) -> Stage2Vm<Installed> {
@@ -80,8 +83,13 @@ impl Stage2Vm<Building> {
 }
 
 impl Stage2Vm<Installed> {
-    pub fn map_guest_ram(&mut self, ipa: IpaAddr, pa: PhysAddr, size: usize) {
-        self.map_pages(ipa, pa, Self::align_4k(size), MemAttr::Normal);
+    pub fn map_guest_ram(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+    ) -> Result<(), MapError> {
+        self.map_pages(ipa, pa, Self::align_4k(size), MemAttr::Normal)
     }
 
     pub fn map_pages(
@@ -90,38 +98,35 @@ impl Stage2Vm<Installed> {
         pa: PhysAddr,
         size: usize,
         attr: MemAttr,
-    ) {
-        self.tables
-            .map_pages(ipa, pa, size, attr)
-            .unwrap_or_else(|err| panic_stage2_map_failed(err));
+    ) -> Result<(), MapError> {
+        self.tables.map_pages(ipa, pa, size, attr)
     }
 }
 
 impl MapGuestRegion for Stage2Vm<Building> {
-    fn map_guest_region(&mut self, region: GuestRegion) {
+    fn map_guest_region(
+        &mut self,
+        region: GuestRegion,
+    ) -> Result<(), MapError> {
         self.map_pages(
             region.ipa(),
             region.pa(),
             Self::align_4k(region.size()),
             region.attr(),
-        );
+        )
     }
 }
 
 impl MapGuestRegion for Stage2Vm<Installed> {
-    fn map_guest_region(&mut self, region: GuestRegion) {
+    fn map_guest_region(
+        &mut self,
+        region: GuestRegion,
+    ) -> Result<(), MapError> {
         self.map_pages(
             region.ipa(),
             region.pa(),
             Self::align_4k(region.size()),
             region.attr(),
-        );
-    }
-}
-
-fn panic_stage2_map_failed(err: MapError) -> ! {
-    crate::log!("stage2: map_range failed: {err:?}");
-    loop {
-        core::hint::spin_loop();
+        )
     }
 }

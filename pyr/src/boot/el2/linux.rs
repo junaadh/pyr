@@ -35,7 +35,13 @@ pub fn boot_linux(image: &[u8], dtb: &[u8]) -> ! {
     );
 
     let mut stage2 = Stage2Vm::new();
-    boot.map_into(&mut stage2);
+    boot.map_into(&mut stage2).unwrap_or_else(|err| {
+        log!("linux stage2 map failed: {err:?}");
+
+        loop {
+            core::hint::spin_loop();
+        }
+    });
 
     log!("stage2 root = {:#018x}", stage2.root_raw());
 

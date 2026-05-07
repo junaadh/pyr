@@ -22,7 +22,13 @@ pub fn boot_tiny() -> ! {
         }
     });
 
-    GuestMemory::map_region(&mut stage2, GuestMemory::ram_window());
+    GuestMemory::map_region(&mut stage2, GuestMemory::ram_window())
+        .unwrap_or_else(|err| {
+            log!("tiny stage2 map filed: {err:?}");
+            loop {
+                core::hint::spin_loop();
+            }
+        });
 
     log!("stage2 root = {:#018x}", stage2.root_raw());
 

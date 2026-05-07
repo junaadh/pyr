@@ -34,11 +34,14 @@ impl LoadedLinuxBoot {
         self.linux.boot_config()
     }
 
-    pub fn map_into<S>(&self, stage2: &mut Stage2Vm<S>)
+    pub fn map_into<S>(
+        &self,
+        stage2: &mut Stage2Vm<S>,
+    ) -> Result<(), pyr_arch::page_table::MapError>
     where
         Stage2Vm<S>: MapGuestRegion,
     {
-        GuestMemory::map_region(stage2, GuestMemory::ram_window());
+        GuestMemory::map_region(stage2, GuestMemory::ram_window())
     }
 }
 
