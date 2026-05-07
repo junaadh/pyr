@@ -1,20 +1,10 @@
 use core::fmt::{self, Write};
 
-use pyr_arch::{
-    exception::{DataAbortIss, TrapFrame},
-    platform::{
-        MmioDevice, MmioDeviceError, read_guest_register, write_back_read_value,
-    },
+use pyr_arch::platform::{
+    MmioAccess, MmioAccessKind, MmioDevice, MmioDeviceError, MmioResult,
 };
 
 use crate::qemu;
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Pl011Error {
-    UnsupportedAccess,
-    BadRegister,
-    BadSourceRegister,
-}
 
 pub struct Pl011;
 
@@ -37,14 +27,14 @@ impl Pl011 {
     pub(crate) fn emulate_putc(byte: u8) {
         let ptr = Self::BASE as *mut u8;
 
-        // SAFETY: QEMU virt exposes PL011 UART MMIO at physical address 0x0900_0000
+        // SAFETY: QEMU virt exposes host PL011 UART MMIO at physical address 0x0900_0000.
         unsafe {
             ptr.write_volatile(byte);
         }
     }
 
-    pub(crate) fn emulate_puts(str: &str) {
-        for byte in str.bytes() {
+    pub(crate) fn emulate_puts(s: &str) {
+        for byte in s.bytes() {
             if byte == b'\n' {
                 Self::emulate_putc(b'\r');
             }
@@ -59,53 +49,59 @@ impl MmioDevice for Pl011 {
         (Self::BASE..Self::BASE + Self::SIZE).contains(&ipa)
     }
 
-    fn emulate(
-        ipa: u64,
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-    ) -> Result<(), MmioDeviceError> {
-        let offset = ipa - Self::BASE;
+    fn emulate(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
+        match access.kind {
+            MmioAccessKind::Read { .. } => {
+                let value = match access.offset {
+                    Self::FR => Self::FR_TXFE | Self::FR_RXFE,
 
-        if iss.wnr {
-            let value = read_guest_register(frame, iss)?;
+                    Self::DR
+                    | Self::IBRD
+                    | Self::FBRD
+                    | Self::LCR_H
+                    | Self::CR
+                    | Self::IMSC
+                    | Self::ICR => 0,
 
-            match offset {
-                Self::DR => Self::emulate_putc(value as u8),
-                Self::IBRD => qemu!("pl011 write IBRD"),
-                Self::FBRD => qemu!("pl011 write FBRD"),
-                Self::LCR_H => qemu!("pl011 write LCR_H"),
-                Self::CR => qemu!("pl011 write CR"),
-                Self::IMSC => qemu!("pl011 write IMSC"),
-                Self::ICR => qemu!("pl011 write ICR"),
-                unknown => qemu!("pl011 write unknown offset={unknown:#x}"),
+                    unknown => {
+                        qemu!("pl011 read unknown offset={unknown:#x}");
+                        return Err(MmioDeviceError::BadRegister);
+                    }
+                };
+
+                Ok(MmioResult::Read(value))
             }
 
-            Ok(())
-        } else {
-            let value = match offset {
-                Self::FR => Self::FR_TXFE | Self::FR_RXFE,
-                Self::DR
-                | Self::IBRD
-                | Self::FBRD
-                | Self::LCR_H
-                | Self::CR
-                | Self::IMSC
-                | Self::ICR => 0,
-                unknown => {
-                    qemu!("pl011 read unknown offset={unknown:#x}");
-                    0
-                }
-            };
+            MmioAccessKind::Write { value, .. } => {
+                match access.offset {
+                    Self::DR => Self::emulate_putc(value as u8),
 
-            write_back_read_value(frame, iss, value)
+                    Self::IBRD
+                    | Self::FBRD
+                    | Self::LCR_H
+                    | Self::CR
+                    | Self::IMSC
+                    | Self::ICR => {
+                        // Intentionally ignored for early console bring-up.
+                    }
+
+                    unknown => {
+                        qemu!(
+                            "pl011 write unknown offset={unknown:#x} value={value:#x}"
+                        );
+                        return Err(MmioDeviceError::BadRegister);
+                    }
+                }
+
+                Ok(MmioResult::Done)
+            }
         }
     }
 }
 
 impl Write for Pl011 {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
         Self::emulate_puts(s);
-
         Ok(())
     }
 }

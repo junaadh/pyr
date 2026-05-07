@@ -7,7 +7,7 @@ pub mod pl011;
 
 use pyr_arch::{
     addr::PhysAddr,
-    platform::{MmioDevice, MmioError, Platform},
+    platform::{MmioAccess, MmioDevice, MmioError, Platform},
 };
 
 use crate::{gic::Gic, pl011::Pl011};
@@ -29,17 +29,21 @@ impl Platform for QemuVirt {
         ipa: pyr_arch::addr::IpaAddr,
         frame: &mut pyr_arch::exception::TrapFrame,
         iss: pyr_arch::exception::DataAbortIss,
-    ) -> Result<(), pyr_arch::platform::MmioError> {
-        let ipa = ipa.as_u64();
+    ) -> Result<(), MmioError> {
+        let raw = ipa.as_u64();
 
-        if Gic::contains(ipa) {
-            return Gic::emulate(ipa, frame, iss)
-                .map_err(MmioError::DeviceError);
+        if Pl011::contains(raw) {
+            let access = MmioAccess::from_abort(ipa, Pl011::BASE, frame, iss)?;
+            let result =
+                Pl011::emulate(access).map_err(MmioError::DeviceError)?;
+            return access.complete(frame, result);
         }
 
-        if Pl011::contains(ipa) {
-            return Pl011::emulate(ipa, frame, iss)
-                .map_err(MmioError::DeviceError);
+        if let Some(base) = Gic::base_for(raw) {
+            let access = MmioAccess::from_abort(ipa, base, frame, iss)?;
+            let result =
+                Gic::emulate(access).map_err(MmioError::DeviceError)?;
+            return access.complete(frame, result);
         }
 
         Err(MmioError::UnknownDevice)
