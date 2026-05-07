@@ -18,8 +18,14 @@ impl Pl011 {
     const FBRD: u64 = 0x028;
     const LCR_H: u64 = 0x02c;
     const CR: u64 = 0x030;
+    const IFLS: u64 = 0x034;
     const IMSC: u64 = 0x038;
     const ICR: u64 = 0x044;
+    const RSR_ECR: u64 = 0x004;
+    const ILPR: u64 = 0x020;
+    const RIS: u64 = 0x03c;
+    const MIS: u64 = 0x040;
+    const DMACR: u64 = 0x048;
 
     const FR_TXFE: u64 = 1 << 7;
     const FR_RXFE: u64 = 1 << 4;
@@ -42,6 +48,20 @@ impl Pl011 {
             Self::emulate_putc(byte);
         }
     }
+
+    fn read_id(offset: u64) -> Option<u64> {
+        Some(match offset {
+            0xfe0 => 0x11,
+            0xfe4 => 0x10,
+            0xfe8 => 0x14,
+            0xfec => 0x00,
+            0xff0 => 0x0d,
+            0xff4 => 0xf0,
+            0xff8 => 0x05,
+            0xffc => 0xb1,
+            _ => return None,
+        })
+    }
 }
 
 impl MmioDevice for Pl011 {
@@ -52,16 +72,26 @@ impl MmioDevice for Pl011 {
     fn emulate(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
         match access.kind {
             MmioAccessKind::Read { .. } => {
+                if let Some(value) = Self::read_id(access.offset) {
+                    return Ok(MmioResult::Read(value));
+                }
+
                 let value = match access.offset {
                     Self::FR => Self::FR_TXFE | Self::FR_RXFE,
 
                     Self::DR
+                    | Self::RSR_ECR
+                    | Self::ILPR
                     | Self::IBRD
                     | Self::FBRD
                     | Self::LCR_H
                     | Self::CR
+                    | Self::IFLS
                     | Self::IMSC
-                    | Self::ICR => return stub_read_zero(access.offset),
+                    | Self::RIS
+                    | Self::MIS
+                    | Self::ICR
+                    | Self::DMACR => return stub_read_zero(access.offset),
 
                     unknown => {
                         qemu!("pl011 read unknown offset={unknown:#x}");
@@ -76,13 +106,18 @@ impl MmioDevice for Pl011 {
                 match access.offset {
                     Self::DR => Self::emulate_putc(value as u8),
 
-                    Self::IBRD
+                    Self::RSR_ECR
+                    | Self::ILPR
+                    | Self::IBRD
                     | Self::FBRD
                     | Self::LCR_H
                     | Self::CR
+                    | Self::IFLS
                     | Self::IMSC
-                    | Self::ICR => {
-                        // Intentionally ignored for early console bring-up.
+                    | Self::RIS
+                    | Self::MIS
+                    | Self::ICR
+                    | Self::DMACR => {
                         return stub_ignore_write(access.offset, value);
                     }
 
@@ -101,6 +136,11 @@ impl MmioDevice for Pl011 {
 }
 
 fn stub_read_zero(offset: u64) -> Result<MmioResult, MmioDeviceError> {
+    #[cfg(not(feature = "trace_stubs"))]
+    {
+        _ = offset;
+    }
+    #[cfg(feature = "trace_stubs")]
     qemu!("pl011 stub read-as-zero offset={offset:#x}");
     Ok(MmioResult::Read(0))
 }
@@ -109,6 +149,12 @@ fn stub_ignore_write(
     offset: u64,
     value: u64,
 ) -> Result<MmioResult, MmioDeviceError> {
+    #[cfg(not(feature = "trace_stubs"))]
+    {
+        _ = offset;
+        _ = value;
+    }
+    #[cfg(feature = "trace_stubs")]
     qemu!("pl011 stub ignore-write offset={offset:#x} value={value:#x}");
     Ok(MmioResult::Done)
 }

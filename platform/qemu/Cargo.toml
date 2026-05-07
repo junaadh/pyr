@@ -11,3 +11,7 @@ pyr-arch.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+default = []
+trace_stubs = []

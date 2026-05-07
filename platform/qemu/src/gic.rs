@@ -147,6 +147,11 @@ fn emulate_cpu(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
 }
 
 fn stub_read_zero(offset: u64) -> Result<MmioResult, MmioDeviceError> {
+    #[cfg(not(feature = "trace_stubs"))]
+    {
+        _ = offset;
+    }
+    #[cfg(feature = "trace_stubs")]
     qemu!("gic stub read-as-zero offset={offset:#x}");
 
     Ok(MmioResult::Read(0))
@@ -156,6 +161,12 @@ fn stub_ignore_write(
     offset: u64,
     value: u64,
 ) -> Result<MmioResult, MmioDeviceError> {
+    #[cfg(not(feature = "trace_stubs"))]
+    {
+        _ = offset;
+        _ = value;
+    }
+    #[cfg(feature = "trace_stubs")]
     qemu!("gic stub ignore-write offset={offset:#x} value={value:#x}");
 
     Ok(MmioResult::Done)
