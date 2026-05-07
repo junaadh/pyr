@@ -1,6 +1,6 @@
 mod resume;
 
-use crate::{hearth, mmio};
+use crate::{fatal::halt, hearth, mmio};
 use pyr_arch::{
     exception::{ExceptionClass, TrapFrame},
     sysregs::el2::{EsrEl2, FarEl2},
@@ -89,21 +89,13 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
     };
 
     match resume {
-        Resume::ReturnToGuest => {
-            // crate::log!("resuming guest @ {:#018x}", frame.elr_el2);
-        }
+        Resume::ReturnToGuest => {}
         Resume::AdvancePcAndReturn => {
             frame.elr_el2 += 4;
-            // crate::log!(
-            //     "advancing and resuming guest @ {:#018x}",
-            //     frame.elr_el2
-            // );
         }
         Resume::Halt => {
             crate::log!("halting after trap");
-            loop {
-                core::hint::spin_loop();
-            }
+            halt()
         }
     }
 }

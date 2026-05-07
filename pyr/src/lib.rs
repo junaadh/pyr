@@ -4,6 +4,7 @@
 
 pub mod boot;
 pub mod console;
+pub mod fatal;
 pub mod guest;
 pub mod hearth;
 pub mod mmio;

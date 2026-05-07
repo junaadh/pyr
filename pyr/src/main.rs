@@ -4,7 +4,7 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 use core::panic::PanicInfo;
-
+use pyr::fatal;
 core::arch::global_asm!(include_str!("start.S"));
 
 #[unsafe(no_mangle)]
@@ -13,9 +13,6 @@ pub extern "C" fn pyr_bare_entry() -> ! {
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo<'_>) -> ! {
-    pyr::println!("[pyr] panic");
-    loop {
-        core::hint::spin_loop();
-    }
+fn panic(info: &PanicInfo<'_>) -> ! {
+    fatal!("{info:?}")
 }

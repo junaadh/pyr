@@ -1,5 +1,6 @@
 #[cfg(feature = "boot-tiny")]
 use crate::{
+    fatal,
     guest::{self, memory::GuestMemory},
     log,
     stage2::Stage2Vm,
@@ -14,21 +15,10 @@ pub fn boot_tiny() -> ! {
     let _dtb = guest::linux::dtb::load_dtb_blob(include_bytes!(
         "../../../assets/qemu-virt.dtb"
     ))
-    .unwrap_or_else(|err| {
-        crate::log!("tiny dtb load failed: {err:?}");
-
-        loop {
-            core::hint::spin_loop();
-        }
-    });
+    .unwrap_or_else(|err| fatal!("tiny dtb load failed: {err:?}"));
 
     GuestMemory::map_region(&mut stage2, GuestMemory::ram_window())
-        .unwrap_or_else(|err| {
-            log!("tiny stage2 map filed: {err:?}");
-            loop {
-                core::hint::spin_loop();
-            }
-        });
+        .unwrap_or_else(|err| fatal!("tiny stage2 map filed: {err:?}"));
 
     log!("stage2 root = {:#018x}", stage2.root_raw());
 
