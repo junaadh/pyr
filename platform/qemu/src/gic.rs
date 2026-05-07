@@ -62,7 +62,7 @@ fn emulate_dist(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
     match access.kind {
         MmioAccessKind::Read { .. } => {
             let value = match access.offset {
-                Gic::GICD_CTLR => 0,
+                Gic::GICD_CTLR => return stub_read_zero(access.offset),
                 Gic::GICD_TYPER => 0x0000_00ff,
                 Gic::GICD_IIDR => 0x0102_0143,
 
@@ -71,7 +71,7 @@ fn emulate_dist(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
                 | 0x180..=0x1ff
                 | 0x300..=0x3ff
                 | 0x400..=0x7ff
-                | 0xc00..=0xcff => 0,
+                | 0xc00..=0xcff => return stub_read_zero(access.offset),
 
                 // ITARGETSR: single CPU target.
                 0x800..=0xbff => 0x0101_0101,
@@ -97,15 +97,13 @@ fn emulate_dist(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
                 | 0x400..=0x7ff // IPRIORITYR
                 | 0x800..=0xbff // ITARGETSR
                 | 0xc00..=0xcff // ICFGR
-                => {}
+                => stub_ignore_write(access.offset, value),
 
                 unknown => {
                     qemu!("gicd write unknown offset={unknown:#x} value={value:#x}");
-                    return Err(MmioDeviceError::BadRegister);
+                    Err(MmioDeviceError::BadRegister)
                 }
             }
-
-            Ok(MmioResult::Done)
         }
     }
 }
@@ -114,15 +112,15 @@ fn emulate_cpu(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
     match access.kind {
         MmioAccessKind::Read { .. } => {
             let value = match access.offset {
-                Gic::GICC_CTLR => 0,
+                Gic::GICC_CTLR => return stub_read_zero(access.offset),
                 Gic::GICC_PMR => 0xff,
-                Gic::GICC_BPR => 0,
+                Gic::GICC_BPR => return stub_read_zero(access.offset),
                 Gic::GICC_IAR => 1023,
                 Gic::GICC_RPR => 0xff,
                 Gic::GICC_HPPIR => 1023,
 
                 // GICC_IIDR-ish probe area Linux may read.
-                0x00fc => 0,
+                0x00fc => return stub_read_zero(access.offset),
 
                 unknown => {
                     qemu!("gicc read unknown offset={unknown:#x}");
@@ -133,22 +131,32 @@ fn emulate_cpu(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
             Ok(MmioResult::Read(value))
         }
 
-        MmioAccessKind::Write { value, .. } => {
-            match access.offset {
-                Gic::GICC_CTLR
-                | Gic::GICC_PMR
-                | Gic::GICC_BPR
-                | Gic::GICC_EOIR => {}
-
-                unknown => {
-                    qemu!(
-                        "gicc write unknown offset={unknown:#x} value={value:#x}"
-                    );
-                    return Err(MmioDeviceError::BadRegister);
-                }
+        MmioAccessKind::Write { value, .. } => match access.offset {
+            Gic::GICC_CTLR | Gic::GICC_PMR | Gic::GICC_BPR | Gic::GICC_EOIR => {
+                stub_ignore_write(access.offset, value)
             }
 
-            Ok(MmioResult::Done)
-        }
+            unknown => {
+                qemu!(
+                    "gicc write unknown offset={unknown:#x} value={value:#x}"
+                );
+                Err(MmioDeviceError::BadRegister)
+            }
+        },
     }
+}
+
+fn stub_read_zero(offset: u64) -> Result<MmioResult, MmioDeviceError> {
+    qemu!("gic stub read-as-zero offset={offset:#x}");
+
+    Ok(MmioResult::Read(0))
+}
+
+fn stub_ignore_write(
+    offset: u64,
+    value: u64,
+) -> Result<MmioResult, MmioDeviceError> {
+    qemu!("gic stub ignore-write offset={offset:#x} value={value:#x}");
+
+    Ok(MmioResult::Done)
 }

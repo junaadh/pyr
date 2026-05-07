@@ -32,11 +32,26 @@ pub enum MmioError {
 pub enum MmioDeviceError {
     UnsupportedAccess,
     BadRegister,
+    StubbedRegister { policy: MmioStub, offset: u64 },
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MmioStub {
+    ReadAsZero,
+    IgnoreWrite,
+}
+
+impl MmioStub {
+    pub const fn describe(self) -> &'static str {
+        match self {
+            Self::ReadAsZero => "read-as-zero",
+            Self::IgnoreWrite => "ignore-write",
+        }
+    }
 }
 
 pub trait MmioDevice {
     fn contains(ipa: u64) -> bool;
-
     fn emulate(access: MmioAccess) -> Result<MmioResult, MmioDeviceError>;
 }
 

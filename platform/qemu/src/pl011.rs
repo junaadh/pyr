@@ -61,7 +61,7 @@ impl MmioDevice for Pl011 {
                     | Self::LCR_H
                     | Self::CR
                     | Self::IMSC
-                    | Self::ICR => 0,
+                    | Self::ICR => return stub_read_zero(access.offset),
 
                     unknown => {
                         qemu!("pl011 read unknown offset={unknown:#x}");
@@ -83,6 +83,7 @@ impl MmioDevice for Pl011 {
                     | Self::IMSC
                     | Self::ICR => {
                         // Intentionally ignored for early console bring-up.
+                        return stub_ignore_write(access.offset, value);
                     }
 
                     unknown => {
@@ -97,6 +98,19 @@ impl MmioDevice for Pl011 {
             }
         }
     }
+}
+
+fn stub_read_zero(offset: u64) -> Result<MmioResult, MmioDeviceError> {
+    qemu!("pl011 stub read-as-zero offset={offset:#x}");
+    Ok(MmioResult::Read(0))
+}
+
+fn stub_ignore_write(
+    offset: u64,
+    value: u64,
+) -> Result<MmioResult, MmioDeviceError> {
+    qemu!("pl011 stub ignore-write offset={offset:#x} value={value:#x}");
+    Ok(MmioResult::Done)
 }
 
 impl Write for Pl011 {
