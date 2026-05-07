@@ -12,30 +12,9 @@ pub enum GuestMemoryError {
     ImageTooLarge,
     DtbTooLarge,
     RegionOutOfGuestRam,
+    InitrdTooLarge,
 }
 
-/// Guest memory layout for the current single-VM prototype.
-///
-/// Guest-visible layout:
-///
-/// ```text
-/// 0x4000_0000..0x4800_0000  guest RAM window, 128 MiB
-/// 0x4020_0000               kernel load IPA
-/// 0x4700_0000               DTB IPA
-/// 0x4800_0000               initial stack top IPA
-/// ```
-///
-/// Backing storage:
-///
-/// ```text
-/// guest IPA -> scratch.guest_ram host PA
-/// ```
-///
-/// Invariants not caught by normal CI:
-/// - EL1 must only receive IPAs, never host physical addresses.
-/// - Any executable/data byte visible to EL1 must be inside `GUEST_RAM_IPA..GUEST_RAM_IPA + GUEST_RAM_SIZE`.
-/// - Device IPAs such as PL011 `0x0900_0000` must remain unmapped if EL2 wants MMIO traps.
-/// - Copy offsets are computed from guest IPAs and must stay inside `scratch.guest_ram`.
 pub struct GuestMemory;
 
 impl GuestMemory {
@@ -45,6 +24,9 @@ impl GuestMemory {
     pub const KERNEL_LOAD_IPA: IpaAddr = IpaAddr::new(0x4000_0000);
     pub const DTB_IPA: IpaAddr = IpaAddr::new(0x7f00_0000);
     pub const STACK_TOP_IPA: IpaAddr = IpaAddr::new(0x7ff0_0000);
+
+    pub const INITRD_IPA: IpaAddr = IpaAddr::new(0x7800_0000);
+    pub const INITRD_MAX_SIZE: usize = 16 * 1024 * 1024;
 
     pub fn ram_window() -> GuestRegion {
         GuestRegion::ram(
@@ -79,6 +61,20 @@ impl GuestMemory {
             Self::DTB_IPA,
             Self::host_pa_for_ipa(Self::DTB_IPA)?,
             dtb.len(),
+        ))
+    }
+
+    pub fn load_initrd(initrd: &[u8]) -> Result<GuestRegion, GuestMemoryError> {
+        if initrd.len() > Self::INITRD_MAX_SIZE {
+            return Err(GuestMemoryError::InitrdTooLarge);
+        }
+
+        Self::copy_into_guest_ram(Self::INITRD_IPA, initrd)?;
+
+        Ok(GuestRegion::ram(
+            Self::INITRD_IPA,
+            Self::host_pa_for_ipa(Self::INITRD_IPA)?,
+            initrd.len(),
         ))
     }
 

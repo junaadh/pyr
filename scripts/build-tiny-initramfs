@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/tmp/pyr-initramfs"
+OUT="pyr/assets/initramfs.cpio"
+
+rm -rf "$ROOT"
+mkdir -p "$ROOT/dev"
+
+cat > "$ROOT/init.S" <<'EOF'
+.global _start
+_start:
+    // fd = openat(AT_FDCWD, "/dev/console", O_WRONLY)
+    mov x0, #-100
+    adr x1, console
+    mov x2, #1
+    mov x3, #0
+    mov x8, #56
+    svc #0
+
+    // write(fd, msg, msg_len)
+    adr x1, msg
+    mov x2, #msg_end - msg
+    mov x8, #64
+    svc #0
+
+1:
+    mov x8, #34 // pause()
+    svc #0
+    b 1b
+
+console:
+    .asciz "/dev/console"
+
+msg:
+    .ascii "hello from pyr init\n"
+msg_end:
+EOF
+
+LLVM="$(brew --prefix llvm)/bin"
+RUSTLLVM="$(rustc +nightly --print sysroot)/lib/rustlib/$(rustc +nightly -vV | sed -n 's/^host: //p')/bin"
+
+"$LLVM/llvm-mc" \
+  -triple=aarch64-none-elf \
+  -filetype=obj \
+  -o "$ROOT/init.o" \
+  "$ROOT/init.S"
+
+"$RUSTLLVM/rust-lld" \
+  -flavor gnu \
+  -m aarch64elf \
+  -static \
+  -nostdlib \
+  -o "$ROOT/init" \
+  "$ROOT/init.o"
+
+chmod +x "$ROOT/init"
+
+sudo mknod "$ROOT/dev/console" c 5 1
+sudo chmod 600 "$ROOT/dev/console"
+
+mkdir -p "$(dirname "$OUT")"
+
+(
+  cd "$ROOT"
+  find . | sudo cpio -o -H newc --owner=0:0
+) > "$OUT"
+
+SIZE="$(stat -f%z "$OUT")"
+printf "built %s (%s bytes)\n" "$OUT" "$SIZE"
+printf "initrd-start = 0x%x\n" 0x78000000
+printf "initrd-end   = 0x%x\n" $((0x78000000 + SIZE))

@@ -3,6 +3,7 @@ use crate::{
         linux::{
             boot_config::LinuxBootConfig,
             dtb::{DtbLoadError, LoadedDtb, load_dtb_blob},
+            initrd::{InitrdLoadError, LoadedInitrd, load_initrd_blob},
             loader::{LinuxLoadError, LoadedLinux, load_linux_image},
         },
         memory::{GuestMemory, MapGuestRegion},
@@ -14,11 +15,13 @@ use crate::{
 pub enum LinuxBootLoadError {
     Image(LinuxLoadError),
     Dtb(DtbLoadError),
+    Initrd(InitrdLoadError),
 }
 
 pub struct LoadedLinuxBoot {
     linux: LoadedLinux,
     dtb: LoadedDtb,
+    initrd: Option<LoadedInitrd>,
 }
 
 impl LoadedLinuxBoot {
@@ -28,6 +31,10 @@ impl LoadedLinuxBoot {
 
     pub const fn dtb(&self) -> &LoadedDtb {
         &self.dtb
+    }
+
+    pub const fn initrd(&self) -> Option<&LoadedInitrd> {
+        self.initrd.as_ref()
     }
 
     pub const fn boot_config(&self) -> LinuxBootConfig {
@@ -48,9 +55,16 @@ impl LoadedLinuxBoot {
 pub fn load_linux_boot(
     image: &[u8],
     dtb: &[u8],
+    initrd: Option<&[u8]>,
 ) -> Result<LoadedLinuxBoot, LinuxBootLoadError> {
     let linux = load_linux_image(image).map_err(LinuxBootLoadError::Image)?;
     let dtb = load_dtb_blob(dtb).map_err(LinuxBootLoadError::Dtb)?;
+    let initrd = match initrd {
+        Some(slice) => {
+            Some(load_initrd_blob(slice).map_err(LinuxBootLoadError::Initrd)?)
+        }
+        None => None,
+    };
 
-    Ok(LoadedLinuxBoot { linux, dtb })
+    Ok(LoadedLinuxBoot { linux, dtb, initrd })
 }

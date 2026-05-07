@@ -6,8 +6,8 @@ use crate::{
 };
 
 #[allow(dead_code)]
-pub fn boot_linux(image: &[u8], dtb: &[u8]) -> ! {
-    let boot = load_linux_boot(image, dtb)
+pub fn boot_linux(image: &[u8], dtb: &[u8], initrd: Option<&[u8]>) -> ! {
+    let boot = load_linux_boot(image, dtb, initrd)
         .unwrap_or_else(|err| fatal!("linux boot load failed: {err:?}"));
 
     log!(

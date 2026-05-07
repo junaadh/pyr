@@ -28,8 +28,10 @@ pub extern "C" fn pyr_entry() -> ! {
 
         static LINUX_IMAGE: &[u8] = include_bytes!("../../assets/img");
         static DTB: &[u8] = include_bytes!("../../assets/qemu-virt.dtb");
+        static INITRD: Option<&[u8]> =
+            Some(include_bytes!("../../assets/initramfs.cpio"));
 
-        boot_linux(LINUX_IMAGE, DTB)
+        boot_linux(LINUX_IMAGE, DTB, INITRD)
     }
 
     #[cfg(feature = "boot-tiny")]

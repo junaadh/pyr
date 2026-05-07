@@ -22,7 +22,8 @@ pub fn load_dtb_blob(dtb: &[u8]) -> Result<LoadedDtb, DtbLoadError> {
     let region = GuestMemory::load_dtb(dtb).map_err(|err| match err {
         GuestMemoryError::ImageTooLarge
         | GuestMemoryError::DtbTooLarge
-        | GuestMemoryError::RegionOutOfGuestRam => DtbLoadError::TooLarge,
+        | GuestMemoryError::RegionOutOfGuestRam
+        | GuestMemoryError::InitrdTooLarge => DtbLoadError::TooLarge,
     })?;
 
     Ok(LoadedDtb { region })
