@@ -19,13 +19,11 @@ impl LoadedDtb {
 }
 
 pub fn load_dtb_blob(dtb: &[u8]) -> Result<LoadedDtb, DtbLoadError> {
-    let region = GuestMemory::load_dtb(dtb.as_ptr(), dtb.len()).map_err(
-        |err| match err {
-            GuestMemoryError::ImageTooLarge
-            | GuestMemoryError::DtbTooLarge
-            | GuestMemoryError::RegionOutOfGuestRam => DtbLoadError::TooLarge,
-        },
-    )?;
+    let region = GuestMemory::load_dtb(dtb).map_err(|err| match err {
+        GuestMemoryError::ImageTooLarge
+        | GuestMemoryError::DtbTooLarge
+        | GuestMemoryError::RegionOutOfGuestRam => DtbLoadError::TooLarge,
+    })?;
 
     Ok(LoadedDtb { region })
 }

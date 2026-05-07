@@ -1,11 +1,8 @@
-use core::ptr;
-
-use pyr_arch::addr::{IpaAddr, PhysAddr};
-
 use crate::{
     guest::region::GuestRegion,
     stage2::{Stage2Vm, scratch},
 };
+use pyr_arch::addr::{IpaAddr, PhysAddr};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum GuestMemoryError {
@@ -54,43 +51,31 @@ impl GuestMemory {
         )
     }
 
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn load_kernel(
-        src: *const u8,
-        len: usize,
-    ) -> Result<GuestRegion, GuestMemoryError> {
-        Self::copy_into_guest_ram(Self::KERNEL_LOAD_IPA, src, len)?;
+    pub fn load_kernel(image: &[u8]) -> Result<GuestRegion, GuestMemoryError> {
+        Self::copy_into_guest_ram(Self::KERNEL_LOAD_IPA, image)?;
 
         Ok(GuestRegion::ram(
             Self::KERNEL_LOAD_IPA,
             Self::host_pa_for_ipa(Self::KERNEL_LOAD_IPA)?,
-            len,
+            image.len(),
         ))
     }
 
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn load_image(
-        src: *const u8,
-        len: usize,
-    ) -> Result<GuestRegion, GuestMemoryError> {
-        Self::load_kernel(src, len)
+    pub fn load_image(image: &[u8]) -> Result<GuestRegion, GuestMemoryError> {
+        Self::load_kernel(image)
     }
 
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn load_dtb(
-        src: *const u8,
-        len: usize,
-    ) -> Result<GuestRegion, GuestMemoryError> {
-        if len > 64 * 1024 {
+    pub fn load_dtb(dtb: &[u8]) -> Result<GuestRegion, GuestMemoryError> {
+        if dtb.len() > 64 * 1024 {
             return Err(GuestMemoryError::DtbTooLarge);
         }
 
-        Self::copy_into_guest_ram(Self::DTB_IPA, src, len)?;
+        Self::copy_into_guest_ram(Self::DTB_IPA, dtb)?;
 
         Ok(GuestRegion::ram(
             Self::DTB_IPA,
             Self::host_pa_for_ipa(Self::DTB_IPA)?,
-            len,
+            dtb.len(),
         ))
     }
 
@@ -107,27 +92,19 @@ impl GuestMemory {
 
     fn copy_into_guest_ram(
         dst_ipa: IpaAddr,
-        src: *const u8,
-        len: usize,
+        src: &[u8],
     ) -> Result<(), GuestMemoryError> {
-        let offset = Self::guest_ram_offset(dst_ipa, len)?;
+        let offset = Self::guest_ram_offset(dst_ipa, src.len())?;
         let scratch = scratch::get_mut();
 
         if scratch.guest_ram.len() < Self::GUEST_RAM_SIZE {
             return Err(GuestMemoryError::RegionOutOfGuestRam);
         }
 
-        // SAFETY:
-        // - `src` is valid for `len` bytes by caller contract.
-        // - destination offset is bounds-checked against the guest RAM window.
-        // - destination is Pyr-owned scratch guest RAM.
-        // - source assets are embedded/static or otherwise outside scratch guest RAM.
-        unsafe {
-            ptr::copy_nonoverlapping(
-                src,
-                scratch.guest_ram.as_mut_ptr().add(offset),
-                len,
-            );
+        if let Some(slice) =
+            scratch.guest_ram.get_mut(offset..offset + src.len())
+        {
+            slice.copy_from_slice(src);
         }
 
         Ok(())

@@ -18,7 +18,10 @@ pub fn load_tiny_guest() -> GuestRegion {
 
     let len = end as usize - src as usize;
 
-    let region = GuestMemory::load_image(src, len).unwrap_or_else(|err| {
+    // SAFETY: *const src and len are calulated from __tiny_guest_* extern symbols
+    let slice = unsafe { core::slice::from_raw_parts(src, len) };
+
+    let region = GuestMemory::load_image(slice).unwrap_or_else(|err| {
         crate::log!("tiny guest too large: {len} bytes: {err:?}");
         loop {
             core::hint::spin_loop();
