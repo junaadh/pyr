@@ -4,6 +4,12 @@
     .global __tiny_guest_end
 
 __tiny_guest_start:
+    ldr w3, [x0]
+    mov x0, #0x7079
+    mov x1, #1
+    mov x2, #'D'
+    hvc #0x0
+
     mov x0, #0x7079
     mov x1, #1
     mov x2, #'A'

@@ -53,4 +53,28 @@ impl SpsrEl2 {
 
         Self(m | daif)
     }
+
+    /// Return to EL1t with DAIF unmasked.
+    ///
+    /// - M[3:0] = 0b0100 = EL1t.
+    /// - D/A/I/F bits masked = bits 9, 8, 7, 6.
+    /// - bit 4 is nRW. 0 = AArch64, 1 = AArch32.
+    #[inline(always)]
+    pub const fn el1t_linux() -> Self {
+        let m = 0b0100; // EL1t
+
+        Self(m)
+    }
+
+    /// Return to EL1h with DAIF unmasked.
+    ///
+    /// - M[3:0] = 0b0101 = EL1h.
+    /// - D/A/I/F bits masked = bits 9, 8, 7, 6.
+    /// - bit 4 is nRW. 0 = AArch64, 1 = AArch32.
+    #[inline(always)]
+    pub const fn el1h_linux() -> Self {
+        let m = 0b0101; // EL1h
+
+        Self(m)
+    }
 }

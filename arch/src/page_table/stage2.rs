@@ -342,6 +342,41 @@ impl<S> Stage2Tables<S> {
     fn l3_index(ipa: IpaAddr) -> usize {
         ((ipa.as_u64() >> 12) & 0x1ff) as usize
     }
+
+    pub fn dump_mapping(
+        &mut self,
+        ipa: IpaAddr,
+    ) -> Result<Stage2MappingDump, MapError> {
+        let l1 = Self::l1_index(ipa);
+        let l2 = Self::l2_index(ipa);
+        let l3 = Self::l3_index(ipa);
+
+        let l1_desc = self.root.entry(l1)?.raw();
+        let l2_desc = self.l2.entry(l2)?.raw();
+
+        let pool = *self.l3_by_l2.get(l2).ok_or(MapError::IndexOutOfRange)?;
+
+        let l3_desc = if pool == u16::MAX {
+            None
+        } else {
+            let table = self
+                .l3_pool
+                .get(pool)
+                .map_err(|_| MapError::IndexOutOfRange)?;
+
+            Some(table.entry(l3)?.raw())
+        };
+
+        Ok(Stage2MappingDump {
+            ipa,
+            l1_index: l1,
+            l2_index: l2,
+            l3_index: l3,
+            l1_desc,
+            l2_desc,
+            l3_desc,
+        })
+    }
 }
 
 fn flush_stage2_tlb() {
@@ -354,4 +389,15 @@ fn flush_stage2_tlb() {
 
     dsb_ish();
     isb();
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct Stage2MappingDump {
+    pub ipa: IpaAddr,
+    pub l1_index: usize,
+    pub l2_index: usize,
+    pub l3_index: usize,
+    pub l1_desc: u64,
+    pub l2_desc: u64,
+    pub l3_desc: Option<u64>,
 }

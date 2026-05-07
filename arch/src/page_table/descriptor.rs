@@ -35,7 +35,7 @@ impl Descriptor {
         value |= 1 << 10;
 
         // attr index
-        value |= (attr.index() as u64) << 2;
+        value |= attr.stage2_bits() << 2;
 
         Self(value)
     }
@@ -56,7 +56,7 @@ impl Descriptor {
         value |= 1 << 10;
 
         // attr index
-        value |= (attr.index() as u64) << 2;
+        value |= attr.stage2_bits() << 2;
 
         Self(value)
     }
@@ -64,15 +64,18 @@ impl Descriptor {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum MemAttr {
-    Normal,
     Device,
+    Normal,
 }
 
 impl MemAttr {
-    pub const fn index(self) -> u8 {
+    pub const fn stage2_bits(self) -> u64 {
         match self {
-            Self::Normal => 0,
-            Self::Device => 1,
+            // Device-nGnRE-ish
+            Self::Device => 0b0001,
+
+            // Normal memory, inner/outer write-back cacheable
+            Self::Normal => 0b1111,
         }
     }
 }

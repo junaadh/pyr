@@ -17,7 +17,7 @@ pub fn handle(
         FunctionId::Putc => {
             let byte = call.arg0 as u8;
 
-            crate::log!("hearth.debug_console.putc: {}", byte as char);
+            // crate::log!("hearth.debug_console.putc: {}", byte as char);
             crate::print!("{}", byte as char);
 
             Ok(())

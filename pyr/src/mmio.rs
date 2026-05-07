@@ -12,8 +12,8 @@ pub fn handle_data_abort(frame: &mut TrapFrame, iss: DataAbortIss) -> Resume {
 
     let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
 
-    crate::log!("trap = DataAbortLower");
-    crate::log!("fault IPA = {ipa:#018x}");
+    // crate::log!("trap = DataAbortLower");
+    // crate::log!("fault IPA = {ipa:#018x}");
 
     match ActivePlatform::mmio_emulate(IpaAddr::new(ipa), frame, iss) {
         Ok(()) => Resume::AdvancePcAndReturn,

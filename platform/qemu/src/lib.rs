@@ -2,56 +2,26 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+pub mod pl011;
+
 use pyr_arch::{
     addr::PhysAddr,
-    exception::{DataAbortIss, TrapFrame},
     platform::{MmioError, Platform},
 };
 
+use crate::pl011::Pl011;
+
 pub struct QemuVirt;
 
-impl QemuVirt {
-    fn emulate_pl011_write(
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-    ) -> Result<(), MmioError> {
-        if !iss.isv {
-            return Err(MmioError::InvalidSyndrome);
-        }
-
-        if !iss.wnr {
-            return Err(MmioError::ReadFault);
-        }
-
-        if iss.sas != 0 {
-            return Err(MmioError::UnsupportedAccess);
-        }
-
-        let reg = iss.srt as usize;
-        let Some(value) = frame.x.get(reg) else {
-            return Err(MmioError::InvalidRegister);
-        };
-
-        let byte = *value as u8;
-
-        Self::early_putc(byte);
-
-        Ok(())
-    }
-}
+impl QemuVirt {}
 
 impl Platform for QemuVirt {
-    const UART_BASE: PhysAddr = PhysAddr::new(0x0900_0000);
+    const UART_BASE: PhysAddr = PhysAddr::new(Pl011::BASE);
 
     fn early_init() {}
 
     fn early_putc(byte: u8) {
-        let ptr = Self::UART_BASE.as_u64() as *mut u8;
-
-        // SAFETY: QEMU virt exposes PL011 UART MMIO at physical address 0x0900_0000
-        unsafe {
-            ptr.write_volatile(byte);
-        }
+        Pl011::emulate_putc(byte);
     }
 
     fn mmio_emulate(
@@ -59,9 +29,20 @@ impl Platform for QemuVirt {
         frame: &mut pyr_arch::exception::TrapFrame,
         iss: pyr_arch::exception::DataAbortIss,
     ) -> Result<(), pyr_arch::platform::MmioError> {
-        match ipa.as_u64() {
-            0x0900_0000 => Self::emulate_pl011_write(frame, iss),
-            _ => Err(MmioError::UnknownDevice),
+        let ipa = ipa.as_u64();
+
+        if Pl011::contains(ipa) {
+            return Pl011::emulate(ipa, frame, iss)
+                .map_err(|_| MmioError::DeviceError);
         }
+
+        Err(MmioError::UnknownDevice)
     }
+}
+
+#[macro_export]
+macro_rules! qemu {
+    ($($args:tt)*) => {
+        $crate::pl011::_print(core::format_args!("[pyr-qemu] {}\n", core::format_args!($($args)*)))
+    };
 }

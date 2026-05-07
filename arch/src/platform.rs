@@ -28,4 +28,5 @@ pub enum MmioError {
     InvalidSyndrome,
     ReadFault,
     WriteFault,
+    DeviceError,
 }

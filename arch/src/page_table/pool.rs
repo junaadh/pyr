@@ -52,6 +52,12 @@ impl PageTablePool {
             .ok_or(PoolError::InvalidIndex)
     }
 
+    pub fn get(&mut self, index: u16) -> Result<&PageTable, PoolError> {
+        self.tables
+            .get(index as usize)
+            .ok_or(PoolError::InvalidIndex)
+    }
+
     pub fn phys_addr_of(&self, index: u16) -> Result<PhysAddr, PoolError> {
         let Some(table) = self.tables.get(index as usize) else {
             return Err(PoolError::InvalidIndex);

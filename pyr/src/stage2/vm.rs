@@ -1,6 +1,8 @@
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
-    page_table::{Building, Installed, MapError, MemAttr, Stage2Tables},
+    page_table::{
+        Building, Installed, MapError, MemAttr, Stage2MappingDump, Stage2Tables,
+    },
 };
 
 use crate::{
@@ -13,6 +15,13 @@ pub struct Stage2Vm<S> {
 }
 
 impl<S> Stage2Vm<S> {
+    pub fn dump_mapping(
+        &mut self,
+        ipa: pyr_arch::addr::IpaAddr,
+    ) -> Result<Stage2MappingDump, MapError> {
+        self.tables.dump_mapping(ipa)
+    }
+
     pub fn root_pa(&self) -> PhysAddr {
         self.tables.root_pa()
     }

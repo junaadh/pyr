@@ -7,6 +7,10 @@ impl SctlrEl1 {
         Self(value)
     }
 
+    pub const fn linux_reset() -> Self {
+        Self(0)
+    }
+
     pub const fn mmu_disabled() -> Self {
         // Keep RES1-ish common bit 11 set. M/C/I off.
         Self(1 << 11)
@@ -34,5 +38,9 @@ impl SctlrEl1 {
 
     pub const fn raw(self) -> u64 {
         self.0
+    }
+
+    pub const fn without_alignment_check(self) -> Self {
+        Self(self.0 & !(1 << 1))
     }
 }

@@ -1,3 +1,5 @@
+pub mod cnthctl_el2;
+pub mod cntvoff_el2;
 pub mod elr_el2;
 pub mod esr_el2;
 pub mod far_el2;
@@ -9,6 +11,8 @@ pub mod vbar_el2;
 pub mod vtcr_el2;
 pub mod vttbr_el2;
 
+pub use cnthctl_el2::CnthctlEl2;
+pub use cntvoff_el2::CntvoffEl2;
 pub use elr_el2::ElrEl2;
 pub use esr_el2::EsrEl2;
 pub use far_el2::FarEl2;
