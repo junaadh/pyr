@@ -1,9 +1,11 @@
+#[cfg(feature = "boot-tiny")]
 use crate::{
     guest::{self, memory::GuestMemory},
     log,
     stage2::Stage2Vm,
 };
 
+#[cfg(feature = "boot-tiny")]
 pub fn boot_tiny() -> ! {
     let mut stage2 = Stage2Vm::new();
 

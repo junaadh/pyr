@@ -1,5 +1,3 @@
-use pyr_arch::addr::IpaAddr;
-
 use crate::{
     guest::{launch::enter_el1_guest, linux::boot::load_linux_boot},
     log,

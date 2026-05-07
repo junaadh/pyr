@@ -13,30 +13,59 @@ pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
 
     let resume = match esr.decode() {
         ExceptionClass::Hvc64 { imm16 } => {
+            const PSCI_SUCCESS: u64 = 0;
+            const PSCI_NOT_SUPPORTED: u64 = (-1i64) as u64;
+
+            const PSCI_VERSION: u64 = 0x8400_0000;
+            const PSCI_CPU_ON: u64 = 0x8400_0003;
+            const PSCI_AFFINITY_INFO: u64 = 0x8400_0004;
+            const PSCI_MIGRATE_INFO_TYPE: u64 = 0x8400_0006;
+            const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
+            const PSCI_SYSTEM_RESET: u64 = 0x8400_0009;
+            const PSCI_FEATURES: u64 = 0x8400_000a;
+
             match frame.x[0] {
-                0x8400_0000 => {
-                    // PSCI_VERSION
+                PSCI_VERSION => {
                     frame.x[0] = 0x0001_0000; // PSCI 1.0
                     Resume::ReturnToGuest
                 }
 
-                0x8400_0003 => {
-                    // PSCI_CPU_ON, single CPU prototype: not supported
-                    frame.x[0] = (-1i64) as u64; // NOT_SUPPORTED
+                PSCI_MIGRATE_INFO_TYPE => {
+                    frame.x[0] = 2; // Trusted OS migration not required
                     Resume::ReturnToGuest
                 }
 
-                0x8400_0008 => {
-                    // PSCI_SYSTEM_OFF
-                    crate::log!("psci: system_off");
+                PSCI_AFFINITY_INFO => {
+                    frame.x[0] = 0; // CPU is on
+                    Resume::ReturnToGuest
+                }
+
+                PSCI_CPU_ON => {
+                    frame.x[0] = PSCI_NOT_SUPPORTED;
+                    Resume::ReturnToGuest
+                }
+
+                PSCI_SYSTEM_OFF | PSCI_SYSTEM_RESET => {
+                    crate::log!("psci: power/reset requested");
                     Resume::Halt
                 }
 
-                0x8400_0009 => {
-                    // PSCI_SYSTEM_RESET
-                    crate::log!("psci: system_reset");
-                    Resume::Halt
+                PSCI_FEATURES => {
+                    let queried = frame.x[1];
+
+                    frame.x[0] = match queried {
+                        PSCI_VERSION
+                        | PSCI_MIGRATE_INFO_TYPE
+                        | PSCI_AFFINITY_INFO
+                        | PSCI_SYSTEM_OFF
+                        | PSCI_SYSTEM_RESET => PSCI_SUCCESS,
+                        PSCI_CPU_ON => PSCI_NOT_SUPPORTED,
+                        _ => PSCI_NOT_SUPPORTED,
+                    };
+
+                    Resume::ReturnToGuest
                 }
+
                 _ => hearth::handle_hvc(frame, imm16),
             }
         }

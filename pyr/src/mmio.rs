@@ -18,7 +18,7 @@ pub fn handle_data_abort(frame: &mut TrapFrame, iss: DataAbortIss) -> Resume {
     match ActivePlatform::mmio_emulate(IpaAddr::new(ipa), frame, iss) {
         Ok(()) => Resume::AdvancePcAndReturn,
         Err(err) => {
-            crate::log!("mmio.error: {err:?}");
+            crate::log!("mmio.error: {err:?} @ {ipa:#018x}");
 
             Resume::Halt
         }

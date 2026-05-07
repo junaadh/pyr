@@ -2,14 +2,15 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+pub mod gic;
 pub mod pl011;
 
 use pyr_arch::{
     addr::PhysAddr,
-    platform::{MmioError, Platform},
+    platform::{MmioDevice, MmioError, Platform},
 };
 
-use crate::pl011::Pl011;
+use crate::{gic::Gic, pl011::Pl011};
 
 pub struct QemuVirt;
 
@@ -31,9 +32,14 @@ impl Platform for QemuVirt {
     ) -> Result<(), pyr_arch::platform::MmioError> {
         let ipa = ipa.as_u64();
 
+        if Gic::contains(ipa) {
+            return Gic::emulate(ipa, frame, iss)
+                .map_err(MmioError::DeviceError);
+        }
+
         if Pl011::contains(ipa) {
             return Pl011::emulate(ipa, frame, iss)
-                .map_err(|_| MmioError::DeviceError);
+                .map_err(MmioError::DeviceError);
         }
 
         Err(MmioError::UnknownDevice)

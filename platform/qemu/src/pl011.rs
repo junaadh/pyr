@@ -1,6 +1,11 @@
 use core::fmt::{self, Write};
 
-use pyr_arch::exception::{DataAbortIss, TrapFrame};
+use pyr_arch::{
+    exception::{DataAbortIss, TrapFrame},
+    platform::{
+        MmioDevice, MmioDeviceError, read_guest_register, write_back_read_value,
+    },
+};
 
 use crate::qemu;
 
@@ -29,107 +34,6 @@ impl Pl011 {
     const FR_TXFE: u64 = 1 << 7;
     const FR_RXFE: u64 = 1 << 4;
 
-    pub fn contains(ipa: u64) -> bool {
-        (Self::BASE..Self::BASE + Self::SIZE).contains(&ipa)
-    }
-
-    pub fn emulate(
-        ipa: u64,
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-    ) -> Result<(), Pl011Error> {
-        let offset = ipa - Self::BASE;
-
-        if iss.wnr {
-            Self::write(offset, frame, iss)
-        } else {
-            Self::read(offset, frame, iss)
-        }
-    }
-
-    fn read(
-        offset: u64,
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-    ) -> Result<(), Pl011Error> {
-        if !iss.isv {
-            return Err(Pl011Error::UnsupportedAccess);
-        }
-
-        let value = match offset {
-            Self::FR => Self::FR_TXFE | Self::FR_RXFE,
-
-            // Linux may probe/read these. Returning zero is fine for now.
-            Self::DR
-            | Self::IBRD
-            | Self::FBRD
-            | Self::LCR_H
-            | Self::CR
-            | Self::IMSC
-            | Self::ICR => 0,
-
-            _ => 0,
-        };
-
-        Self::write_back_read_value(frame, iss, value)
-    }
-
-    fn write(
-        offset: u64,
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-    ) -> Result<(), Pl011Error> {
-        if !iss.isv {
-            return Err(Pl011Error::UnsupportedAccess);
-        }
-
-        let reg = iss.srt as usize;
-        let value = frame
-            .x
-            .get(reg)
-            .copied()
-            .ok_or(Pl011Error::BadSourceRegister)?;
-
-        match offset {
-            Self::DR => {
-                Self::emulate_putc(value as u8);
-            }
-
-            Self::IBRD => qemu!("pl1011 read IBRD"),
-            Self::FBRD => qemu!("pl1011 read FBRD"),
-            Self::LCR_H => qemu!("pl1011 read LCR_H"),
-            Self::CR => qemu!("pl1011 read CR"),
-            Self::IMSC => qemu!("pl1011 read IMSC"),
-            Self::ICR => qemu!("pl011 read ICR"),
-
-            unknown => {
-                // Unknown PL011 offsets are ignored for bring-up.
-                qemu!("pl011 access offset={unknown:#x} wnr={}", iss.wnr);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn write_back_read_value(
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-        value: u64,
-    ) -> Result<(), Pl011Error> {
-        let reg = iss.srt as usize;
-        let slot = frame.x.get_mut(reg).ok_or(Pl011Error::BadSourceRegister)?;
-
-        *slot = match iss.sas {
-            0 => value & 0xff,
-            1 => value & 0xffff,
-            2 => value & 0xffff_ffff,
-            3 => value,
-            _ => return Err(Pl011Error::UnsupportedAccess),
-        };
-
-        Ok(())
-    }
-
     pub(crate) fn emulate_putc(byte: u8) {
         let ptr = Self::BASE as *mut u8;
 
@@ -146,6 +50,54 @@ impl Pl011 {
             }
 
             Self::emulate_putc(byte);
+        }
+    }
+}
+
+impl MmioDevice for Pl011 {
+    fn contains(ipa: u64) -> bool {
+        (Self::BASE..Self::BASE + Self::SIZE).contains(&ipa)
+    }
+
+    fn emulate(
+        ipa: u64,
+        frame: &mut TrapFrame,
+        iss: DataAbortIss,
+    ) -> Result<(), MmioDeviceError> {
+        let offset = ipa - Self::BASE;
+
+        if iss.wnr {
+            let value = read_guest_register(frame, iss)?;
+
+            match offset {
+                Self::DR => Self::emulate_putc(value as u8),
+                Self::IBRD => qemu!("pl011 write IBRD"),
+                Self::FBRD => qemu!("pl011 write FBRD"),
+                Self::LCR_H => qemu!("pl011 write LCR_H"),
+                Self::CR => qemu!("pl011 write CR"),
+                Self::IMSC => qemu!("pl011 write IMSC"),
+                Self::ICR => qemu!("pl011 write ICR"),
+                unknown => qemu!("pl011 write unknown offset={unknown:#x}"),
+            }
+
+            Ok(())
+        } else {
+            let value = match offset {
+                Self::FR => Self::FR_TXFE | Self::FR_RXFE,
+                Self::DR
+                | Self::IBRD
+                | Self::FBRD
+                | Self::LCR_H
+                | Self::CR
+                | Self::IMSC
+                | Self::ICR => 0,
+                unknown => {
+                    qemu!("pl011 read unknown offset={unknown:#x}");
+                    0
+                }
+            };
+
+            write_back_read_value(frame, iss, value)
         }
     }
 }
