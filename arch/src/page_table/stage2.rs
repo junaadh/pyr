@@ -4,6 +4,7 @@ use crate::{
     addr::{IpaAddr, PhysAddr},
     barrier::{dsb_ish, isb},
     page::ENTRIES_PER_TABLE,
+    page_table::PageTablePool,
 };
 
 use super::{Descriptor, MemAttr};
@@ -18,6 +19,7 @@ pub enum MapError {
     CrossesL1Boundary,
     AlreadyMapped,
     IndexOutOfRange,
+    OutOfPageTables,
 }
 
 #[repr(align(4096))]
@@ -55,7 +57,13 @@ impl PageTable {
 pub struct Stage2Tables<S> {
     root: &'static mut PageTable,
     l2: &'static mut PageTable,
-    l3: &'static mut PageTable,
+    l3_pool: &'static mut PageTablePool,
+
+    /// Maps L2 slot -> pool table index.
+    ///
+    /// u16::MAX means "not allocated".
+    l3_by_l2: [u16; 512],
+
     _state: PhantomData<S>,
 }
 
@@ -63,16 +71,17 @@ impl Stage2Tables<Building> {
     pub fn new(
         root: &'static mut PageTable,
         l2: &'static mut PageTable,
-        l3: &'static mut PageTable,
+        l3_pool: &'static mut PageTablePool,
     ) -> Self {
         root.clear();
         l2.clear();
-        l3.clear();
+        l3_pool.reset();
 
         Self {
             root,
             l2,
-            l3,
+            l3_pool,
+            l3_by_l2: [u16::MAX; 512],
             _state: PhantomData,
         }
     }
@@ -91,7 +100,8 @@ impl Stage2Tables<Building> {
         Stage2Tables {
             root: self.root,
             l2: self.l2,
-            l3: self.l3,
+            l3_pool: self.l3_pool,
+            l3_by_l2: self.l3_by_l2,
             _state: PhantomData,
         }
     }
@@ -230,10 +240,7 @@ impl<S> Stage2Tables<S> {
         Self::validate_page_mapping(ipa, pa, size)?;
 
         let l1 = Self::l1_index(ipa);
-        let l2 = Self::l2_index(ipa);
-
         self.ensure_l2_table(l1)?;
-        self.ensure_l3_table(l2)?;
 
         for offset in (0..size as u64).step_by(Self::PAGE_SIZE as usize) {
             let cur_ipa = ipa.offset(offset);
@@ -268,25 +275,34 @@ impl<S> Stage2Tables<S> {
             return Err(MapError::CrossesL1Boundary);
         }
 
-        let start_l2 = Self::l2_index(ipa);
-        let end_l2 = Self::l2_index(end_ipa);
-
-        if start_l2 != end_l2 {
-            return Err(MapError::CrossesL1Boundary);
-        }
-
         Ok(())
     }
 
-    fn ensure_l3_table(&mut self, l2_index: usize) -> Result<(), MapError> {
-        if self.l2.entry(l2_index)?.is_valid() {
-            return Ok(());
+    fn ensure_l3_table(&mut self, l2_index: usize) -> Result<u16, MapError> {
+        let Some(&existing) = self.l3_by_l2.get(l2_index) else {
+            return Err(MapError::IndexOutOfRange);
+        };
+
+        if existing != u16::MAX {
+            return Ok(existing);
         }
 
-        let l3_pa = self.l3.paddr().as_u64();
-        *self.l2.entry_mut(l2_index)? = Descriptor::table(l3_pa);
+        let pool_index = self
+            .l3_pool
+            .alloc_index()
+            .map_err(|_| MapError::OutOfPageTables)?;
 
-        Ok(())
+        let table_pa = self.l3_pool.phys_addr_of(pool_index);
+
+        *self.l2.entry_mut(l2_index)? = Descriptor::table(
+            table_pa.map_err(|_| MapError::IndexOutOfRange)?.as_u64(),
+        );
+
+        if let Some(x) = self.l3_by_l2.get_mut(l2_index) {
+            *x = pool_index;
+        }
+
+        Ok(pool_index)
     }
 
     fn map_page(
@@ -295,13 +311,22 @@ impl<S> Stage2Tables<S> {
         pa: PhysAddr,
         attr: MemAttr,
     ) -> Result<(), MapError> {
+        let l2_index = Self::l2_index(ipa);
+
         let l3_index = Self::l3_index(ipa);
 
-        if self.l3.entry(l3_index)?.is_valid() {
+        let pool_index = self.ensure_l3_table(l2_index)?;
+
+        let l3 = self
+            .l3_pool
+            .get_mut(pool_index)
+            .map_err(|_| MapError::IndexOutOfRange)?;
+
+        if l3.entry(l3_index)?.is_valid() {
             return Err(MapError::AlreadyMapped);
         }
 
-        *self.l3.entry_mut(l3_index)? = Descriptor::page(pa.as_u64(), attr);
+        *l3.entry_mut(l3_index)? = Descriptor::page(pa.as_u64(), attr);
 
         Ok(())
     }

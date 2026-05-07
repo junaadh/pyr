@@ -1,28 +1,45 @@
-use crate::{
-    ActivePlatform,
-    guest::{self, memory::GuestMemory},
-    log,
-    stage2::Stage2Vm,
-};
+mod linux;
+mod tiny;
+
+use crate::{ActivePlatform, log};
 use pyr_arch::{
     barrier::isb,
     exception::install_el2_vectors,
+    platform::Platform,
     sysregs::{
         common::CurrentEl,
         el2::{HcrEl2, SctlrEl2, VbarEl2, VtcrEl2, VttbrEl2},
     },
 };
 
+#[cfg(all(feature = "boot-tiny", feature = "boot-linux"))]
+compile_error!("Only one feature can be active at the same time");
+
+#[cfg(not(any(feature = "boot-tiny", feature = "boot-linux")))]
+compile_error!("One feature needs to be activated");
+
 #[unsafe(no_mangle)]
 pub extern "C" fn pyr_entry() -> ! {
-    pyr::<ActivePlatform>()
+    init_el2();
+
+    #[cfg(feature = "boot-linux")]
+    {
+        use crate::boot::el2::linux::boot_linux;
+
+        static LINUX_IMAGE: &[u8] = include_bytes!("../../assets/img");
+        static DTB: &[u8] = include_bytes!("../../assets/qemu-virt.dtb");
+
+        boot_linux(LINUX_IMAGE, DTB)
+    }
+
+    #[cfg(feature = "boot-tiny")]
+    {
+        tiny::boot_tiny()
+    }
 }
 
-pub fn pyr<P>() -> !
-where
-    P: pyr_arch::platform::Platform,
-{
-    P::early_init();
+pub fn init_el2() {
+    <ActivePlatform as Platform>::early_init();
     log!("booting");
 
     install_el2_vectors();
@@ -54,18 +71,4 @@ where
 
     log!("VTCR_EL2 = {:#018x}", VtcrEl2::mrs().raw());
     log!("VTTBR_EL2 = {:#018x}", VttbrEl2::mrs().raw());
-
-    let mut stage2 = Stage2Vm::new();
-
-    let image = guest::tiny::load_tiny_guest();
-    let stack = GuestMemory::stack_region();
-
-    GuestMemory::map_region(&mut stage2, image);
-    GuestMemory::map_region(&mut stage2, stack);
-
-    log!("stage2 root = {:#018x}", stage2.root_raw());
-
-    stage2.install();
-
-    guest::tiny::enter_tiny_guest()
 }

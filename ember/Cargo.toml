@@ -9,10 +9,20 @@ repository.workspace = true
 [dependencies]
 pyr-arch.workspace = true
 pyr-platform-qemu = { workspace = true, optional = true }
-pyr = { path = "../pyr" }
+pyr = { path = "../pyr", default-features = false }
 
 [features]
-default = ["platform-qemu-virt"]
+default = ["boot-tiny"]
+boot-tiny = [
+  "platform-qemu-virt",
+  "pyr/boot-tiny",
+  "pyr/platform-qemu-virt"
+]
+boot-linux = [
+  "platform-qemu-virt",
+  "pyr/boot-linux",
+  "pyr/platform-qemu-virt",
+]
 platform-qemu-virt = ["dep:pyr-platform-qemu"]
 
 [lints]

@@ -34,7 +34,7 @@ pub fn load_tiny_guest() -> GuestRegion {
 
 pub fn enter_tiny_guest() -> ! {
     enter_el1_guest(GuestConfig::new(
-        GuestMemory::ENTRY_IPA.as_u64(),
+        GuestMemory::KERNEL_LOAD_IPA.as_u64(),
         GuestMemory::stack_top_ipa(),
     ))
 }

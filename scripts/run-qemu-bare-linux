@@ -5,7 +5,7 @@ cargo +nightly build \
   -p pyr \
   --target aarch64-unknown-none \
   --release \
-  --features "platform-qemu-virt boot-tiny"
+  --features "platform-qemu-virt boot-linux"
 
 OBJCOPY="$(rustc +nightly --print sysroot)/lib/rustlib/$(rustc +nightly -vV | sed -n 's/^host: //p')/bin/rust-objcopy"
 

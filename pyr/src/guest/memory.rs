@@ -1,70 +1,101 @@
+use core::ptr;
+
+use pyr_arch::addr::{IpaAddr, PhysAddr};
+
 use crate::{
     guest::region::GuestRegion,
     stage2::{Stage2Vm, scratch},
 };
-use core::ptr;
-use pyr_arch::addr::{IpaAddr, PhysAddr};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum GuestMemoryError {
     ImageTooLarge,
+    DtbTooLarge,
+    RegionOutOfGuestRam,
 }
 
-/// Owns the guest memory layout decisions for the current VM.
+/// Guest memory layout for the current single-VM prototype.
 ///
-/// This does not allocate memory yet. Backing storage currently comes from
-/// `BootScratch`. Later this can become a real physical page allocator.
+/// Guest-visible layout:
 ///
-/// Invariant not caught by normal CI:
-/// - every address handed to EL1 must be an IPA, never a host PA.
-/// - every byte executed by EL1 must be backed by an explicit stage-2 mapping.
-/// - MMIO interception depends on *not* mapping device IPAs like PL011.
+/// ```text
+/// 0x4000_0000..0x4800_0000  guest RAM window, 128 MiB
+/// 0x4020_0000               kernel load IPA
+/// 0x4700_0000               DTB IPA
+/// 0x4800_0000               initial stack top IPA
+/// ```
+///
+/// Backing storage:
+///
+/// ```text
+/// guest IPA -> scratch.guest_ram host PA
+/// ```
+///
+/// Invariants not caught by normal CI:
+/// - EL1 must only receive IPAs, never host physical addresses.
+/// - Any executable/data byte visible to EL1 must be inside `GUEST_RAM_IPA..GUEST_RAM_IPA + GUEST_RAM_SIZE`.
+/// - Device IPAs such as PL011 `0x0900_0000` must remain unmapped if EL2 wants MMIO traps.
+/// - Copy offsets are computed from guest IPAs and must stay inside `scratch.guest_ram`.
 pub struct GuestMemory;
 
 impl GuestMemory {
-    pub const ENTRY_IPA: IpaAddr = IpaAddr::new(0x4000_0000);
-    pub const STACK_IPA: IpaAddr = IpaAddr::new(0x4002_0000);
-    pub const STACK_SIZE: usize = 16 * 1024;
-    pub const DTB_IPA: IpaAddr = IpaAddr::new(0x4100_0000);
-    pub const DTB_MAX_SIZE: usize = 64 * 1024;
+    pub const GUEST_RAM_IPA: IpaAddr = IpaAddr::new(0x4000_0000);
+    pub const GUEST_RAM_SIZE: usize = 1024 * 1024 * 1024;
+
+    pub const KERNEL_LOAD_IPA: IpaAddr = IpaAddr::new(0x4000_0000);
+    pub const DTB_IPA: IpaAddr = IpaAddr::new(0x7f00_0000);
+    pub const STACK_TOP_IPA: IpaAddr = IpaAddr::new(0x7ff0_0000);
+
+    pub fn ram_window() -> GuestRegion {
+        GuestRegion::ram(
+            Self::GUEST_RAM_IPA,
+            PhysAddr::new(scratch::guest_ram_base()),
+            Self::GUEST_RAM_SIZE,
+        )
+    }
+
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn load_kernel(
+        src: *const u8,
+        len: usize,
+    ) -> Result<GuestRegion, GuestMemoryError> {
+        Self::copy_into_guest_ram(Self::KERNEL_LOAD_IPA, src, len)?;
+
+        Ok(GuestRegion::ram(
+            Self::KERNEL_LOAD_IPA,
+            Self::host_pa_for_ipa(Self::KERNEL_LOAD_IPA)?,
+            len,
+        ))
+    }
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn load_image(
         src: *const u8,
         len: usize,
     ) -> Result<GuestRegion, GuestMemoryError> {
-        let scratch = scratch::get_mut();
+        Self::load_kernel(src, len)
+    }
 
-        if len > scratch.guest_ram.len() {
-            return Err(GuestMemoryError::ImageTooLarge);
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn load_dtb(
+        src: *const u8,
+        len: usize,
+    ) -> Result<GuestRegion, GuestMemoryError> {
+        if len > 64 * 1024 {
+            return Err(GuestMemoryError::DtbTooLarge);
         }
 
-        // SAFETY:
-        // - `src` points to an embedded guest payload range.
-        // - destination is dedicated scratch guest RAM.
-        // - caller provides `len` derived from start/end linker symbols.
-        // - source and destination are distinct regions.
-        unsafe {
-            ptr::copy_nonoverlapping(src, scratch.guest_ram.as_mut_ptr(), len);
-        }
+        Self::copy_into_guest_ram(Self::DTB_IPA, src, len)?;
 
         Ok(GuestRegion::ram(
-            Self::ENTRY_IPA,
-            PhysAddr::new(scratch::guest_ram_base()),
+            Self::DTB_IPA,
+            Self::host_pa_for_ipa(Self::DTB_IPA)?,
             len,
         ))
     }
 
-    pub fn stack_region() -> GuestRegion {
-        GuestRegion::ram(
-            Self::STACK_IPA,
-            PhysAddr::new(scratch::guest_stack_base()),
-            Self::STACK_SIZE,
-        )
-    }
-
     pub fn stack_top_ipa() -> u64 {
-        Self::STACK_IPA.as_u64() + Self::STACK_SIZE as u64
+        Self::STACK_TOP_IPA.as_u64()
     }
 
     pub fn map_region<S>(stage2: &mut Stage2Vm<S>, region: GuestRegion)
@@ -74,31 +105,60 @@ impl GuestMemory {
         stage2.map_guest_region(region);
     }
 
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn load_dtb(
+    fn copy_into_guest_ram(
+        dst_ipa: IpaAddr,
         src: *const u8,
         len: usize,
-    ) -> Result<GuestRegion, GuestMemoryError> {
+    ) -> Result<(), GuestMemoryError> {
+        let offset = Self::guest_ram_offset(dst_ipa, len)?;
         let scratch = scratch::get_mut();
 
-        if len > scratch.dtb.len() {
-            return Err(GuestMemoryError::ImageTooLarge);
+        if scratch.guest_ram.len() < Self::GUEST_RAM_SIZE {
+            return Err(GuestMemoryError::RegionOutOfGuestRam);
         }
 
         // SAFETY:
-        // - `src` points to an embedded dtb payload range.
-        // - destination is dedicated scratch memory.
-        // - caller provides `len` derived from start/end linker symbols.
-        // - source and destination are distinct regions.
+        // - `src` is valid for `len` bytes by caller contract.
+        // - destination offset is bounds-checked against the guest RAM window.
+        // - destination is Pyr-owned scratch guest RAM.
+        // - source assets are embedded/static or otherwise outside scratch guest RAM.
         unsafe {
-            core::ptr::copy_nonoverlapping(src, scratch.dtb.as_mut_ptr(), len);
+            ptr::copy_nonoverlapping(
+                src,
+                scratch.guest_ram.as_mut_ptr().add(offset),
+                len,
+            );
         }
 
-        Ok(GuestRegion::ram(
-            Self::DTB_IPA,
-            PhysAddr::new(scratch::dtb_base()),
-            len,
-        ))
+        Ok(())
+    }
+
+    fn guest_ram_offset(
+        dst_ipa: IpaAddr,
+        len: usize,
+    ) -> Result<usize, GuestMemoryError> {
+        let base = Self::GUEST_RAM_IPA.as_u64();
+        let dst = dst_ipa.as_u64();
+
+        if dst < base {
+            return Err(GuestMemoryError::RegionOutOfGuestRam);
+        }
+
+        let offset = dst - base;
+        let end = offset
+            .checked_add(len as u64)
+            .ok_or(GuestMemoryError::RegionOutOfGuestRam)?;
+
+        if end > Self::GUEST_RAM_SIZE as u64 {
+            return Err(GuestMemoryError::RegionOutOfGuestRam);
+        }
+
+        Ok(offset as usize)
+    }
+
+    fn host_pa_for_ipa(ipa: IpaAddr) -> Result<PhysAddr, GuestMemoryError> {
+        let offset = Self::guest_ram_offset(ipa, 1)?;
+        Ok(PhysAddr::new(scratch::guest_ram_base() + offset as u64))
     }
 }
 

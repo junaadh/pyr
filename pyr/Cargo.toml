@@ -12,6 +12,8 @@ pyr-platform-qemu = { workspace = true, optional = true }
 
 [features]
 default = ["platform-qemu-virt"]
+boot-tiny = ["platform-qemu-virt"]
+boot-linux = ["platform-qemu-virt"]
 platform-qemu-virt = ["dep:pyr-platform-qemu"]
 
 [lints]
