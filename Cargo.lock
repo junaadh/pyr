@@ -20,6 +20,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pyr-alloc"
+version = "0.1.0"
+dependencies = [
+ "pyr-arch",
+]
+
+[[package]]
 name = "pyr-arch"
 version = "0.1.0"
 

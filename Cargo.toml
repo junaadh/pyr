@@ -1,8 +1,9 @@
 [workspace]
-members = ["arch", "ember", "platform/qemu", "pyr"]
+members = ["alloc","arch", "ember", "platform/qemu", "pyr"]
 resolver = "2"
 
 [workspace.dependencies]
+pyr-alloc = { path = "alloc" }
 pyr-arch = { path = "arch" }
 pyr-platform-qemu = { path = "platform/qemu" }
 
