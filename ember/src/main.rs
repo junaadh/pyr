@@ -10,7 +10,8 @@ type SytemTable = *mut core::ffi::c_void;
 
 #[unsafe(no_mangle)]
 pub extern "efiapi" fn efi_main(_image: Handle, _st: SytemTable) -> usize {
-    pyr::boot::enter()
+    // SAFETY: known null pointer for the stubbing
+    unsafe { pyr::boot::pyr_entry_raw(core::ptr::null()) }
 }
 
 #[panic_handler]
