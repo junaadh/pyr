@@ -1,10 +1,9 @@
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ptr::NonNull};
 
 use crate::{
     addr::{IpaAddr, PhysAddr},
     barrier::{dsb_ish, isb},
     page::ENTRIES_PER_TABLE,
-    page_table::PageTablePool,
 };
 
 use super::{Descriptor, MemAttr};
@@ -16,10 +15,10 @@ pub struct Installed;
 pub enum MapError {
     UnalignedAddress,
     UnalignedSize,
-    CrossesL1Boundary,
     AlreadyMapped,
     IndexOutOfRange,
     OutOfPageTables,
+    InvalidTable,
 }
 
 #[repr(align(4096))]
@@ -55,89 +54,95 @@ impl PageTable {
 }
 
 pub struct Stage2Tables<S> {
-    root: &'static mut PageTable,
-    l2: &'static mut PageTable,
-    l3_pool: &'static mut PageTablePool,
-
-    /// Maps L2 slot -> pool table index.
-    ///
-    /// u16::MAX means "not allocated".
-    l3_by_l2: [u16; 512],
-
+    root: NonNull<PageTable>,
     _state: PhantomData<S>,
 }
 
 impl Stage2Tables<Building> {
-    pub fn new(
-        root: &'static mut PageTable,
-        l2: &'static mut PageTable,
-        l3_pool: &'static mut PageTablePool,
-    ) -> Self {
-        root.clear();
-        l2.clear();
-        l3_pool.reset();
+    /// # Safety
+    ///
+    /// `root` must point to a valid, 4 KiB-aligned, zeroed page table.
+    /// The caller must own the backing frame for atleast as long as this
+    /// `Stage2Tables` value lives
+    pub unsafe fn new(root: NonNull<PageTable>) -> Self {
+        // SAFETY: `root` must be a valid pointer to a writable `PageTable`
+        unsafe {
+            if let Some(x) = root.as_ptr().as_mut() {
+                x.clear()
+            }
+        }
 
         Self {
             root,
-            l2,
-            l3_pool,
-            l3_by_l2: [u16::MAX; 512],
             _state: PhantomData,
         }
-    }
-
-    pub fn map_range(
-        &mut self,
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        size: usize,
-        attr: MemAttr,
-    ) -> Result<(), MapError> {
-        self.map_range_inner(ipa, pa, size, attr)
     }
 
     pub fn install(self) -> Stage2Tables<Installed> {
         Stage2Tables {
             root: self.root,
-            l2: self.l2,
-            l3_pool: self.l3_pool,
-            l3_by_l2: self.l3_by_l2,
             _state: PhantomData,
         }
     }
 
-    pub fn map_pages(
+    pub fn map_blocks<F>(
         &mut self,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
         attr: MemAttr,
-    ) -> Result<(), MapError> {
-        self.map_pages_inner(ipa, pa, size, attr)
+        mut alloc_table: F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        self.map_blocks_inner(ipa, pa, size, attr, &mut alloc_table)
+    }
+
+    pub fn map_pages<F>(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+        attr: MemAttr,
+        mut alloc_table: F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        self.map_pages_inner(ipa, pa, size, attr, &mut alloc_table)
     }
 }
 
 impl Stage2Tables<Installed> {
-    pub fn map_range(
+    pub fn map_blocks<F>(
         &mut self,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
         attr: MemAttr,
-    ) -> Result<(), MapError> {
-        self.map_range_inner(ipa, pa, size, attr)?;
+        mut alloc_table: F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        self.map_blocks_inner(ipa, pa, size, attr, &mut alloc_table)?;
         flush_stage2_tlb();
         Ok(())
     }
 
-    pub fn map_pages(
+    pub fn map_pages<F>(
         &mut self,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
         attr: MemAttr,
-    ) -> Result<(), MapError> {
-        self.map_pages_inner(ipa, pa, size, attr)?;
+        mut alloc_table: F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        self.map_pages_inner(ipa, pa, size, attr, &mut alloc_table)?;
         flush_stage2_tlb();
         Ok(())
     }
@@ -148,106 +153,167 @@ impl<S> Stage2Tables<S> {
     const PAGE_SIZE: u64 = 4096;
 
     pub fn root_pa(&self) -> PhysAddr {
-        self.root.paddr()
+        // SAFETY:
+        // `root` was created from a valid frame-backed PageTable in
+        // `Stage2Tables::new` and the owning Stage2Vm keeps that frame alive.
+        unsafe { self.root.as_ref().paddr() }
     }
 
     pub fn root_raw(&self) -> u64 {
         self.root_pa().as_u64()
     }
 
-    fn map_range_inner(
+    fn root_mut(&mut self) -> &mut PageTable {
+        // SAFETY:
+        // `&mut self` guarantees exclusive access to the table walker. The root
+        // pointer is valid for the lifetime of this Stage2Tables value because
+        // Stage2Vm owns the backing PhysFrame.
+        unsafe { self.root.as_mut() }
+    }
+
+    unsafe fn table_at_mut<'a>(
+        pa: PhysAddr,
+    ) -> Result<&'a mut PageTable, MapError> {
+        let ptr = pa.as_u64() as *mut PageTable;
+
+        if ptr.is_null() || !pa.as_u64().is_multiple_of(Self::PAGE_SIZE) {
+            return Err(MapError::InvalidTable);
+        }
+
+        // SAFETY:
+        // `pa` came from a table descriptor installed by this walker. Table
+        // descriptors are only created from frame addresses returned by the
+        // allocation callback, so the address is valid, 4 KiB-aligned, and points
+        // to a live PageTable frame owned by Stage2Vm.
+        Ok(unsafe { &mut *ptr })
+    }
+
+    fn ensure_table<'a, F>(
+        entry: &mut Descriptor,
+        alloc_table: &mut F,
+    ) -> Result<&'a mut PageTable, MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        if entry.is_valid() {
+            if !entry.is_table() {
+                return Err(MapError::AlreadyMapped);
+            }
+
+            // SAFETY:
+            // A valid table descriptor in this walker can only have been installed by
+            // `ensure_table` from an allocator-provided PageTable frame. Therefore its
+            // output address points to a live child table owned by Stage2Vm.
+            return unsafe { Self::table_at_mut(entry.output_addr()) };
+        }
+
+        let table_pa = alloc_table()?;
+        *entry = Descriptor::table(table_pa.as_u64());
+
+        // SAFETY:
+        // `alloc_table` returns the physical address of a freshly zeroed PageTable
+        // frame and stores ownership in Stage2Vm before returning. The descriptor
+        // above now points at that live table.
+        unsafe { Self::table_at_mut(table_pa) }
+    }
+
+    fn map_pages_inner<F>(
         &mut self,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
         attr: MemAttr,
-    ) -> Result<(), MapError> {
-        Self::validate_mapping(ipa, pa, size)?;
-
-        let l1 = Self::l1_index(ipa);
-        self.ensure_l2_table(l1)?;
-
-        for offset in (0..size as u64).step_by(Self::BLOCK_SIZE as usize) {
-            let cur_ipa = ipa.offset(offset);
-            let cur_pa = pa.offset(offset);
-            self.map_block(cur_ipa, cur_pa, attr)?;
-        }
-
-        Ok(())
-    }
-
-    fn validate_mapping(
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        size: usize,
-    ) -> Result<(), MapError> {
-        if !ipa.as_u64().is_multiple_of(Self::BLOCK_SIZE)
-            || !pa.as_u64().is_multiple_of(Self::BLOCK_SIZE)
-        {
-            return Err(MapError::UnalignedAddress);
-        }
-
-        if !(size as u64).is_multiple_of(Self::BLOCK_SIZE) {
-            return Err(MapError::UnalignedSize);
-        }
-
-        let start_l1 = Self::l1_index(ipa);
-        let end_ipa = ipa.offset(size as u64 - 1);
-        let end_l1 = Self::l1_index(end_ipa);
-
-        if start_l1 != end_l1 {
-            return Err(MapError::CrossesL1Boundary);
-        }
-
-        Ok(())
-    }
-
-    fn ensure_l2_table(&mut self, l1_index: usize) -> Result<(), MapError> {
-        if self.root.entry(l1_index)?.is_valid() {
-            return Ok(());
-        }
-
-        let l2_pa = self.l2.paddr().as_u64();
-        *self.root.entry_mut(l1_index)? = Descriptor::table(l2_pa);
-
-        Ok(())
-    }
-
-    fn map_block(
-        &mut self,
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        attr: MemAttr,
-    ) -> Result<(), MapError> {
-        let l2_index = Self::l2_index(ipa);
-
-        if self.l2.entry(l2_index)?.is_valid() {
-            return Err(MapError::AlreadyMapped);
-        }
-
-        *self.l2.entry_mut(l2_index)? = Descriptor::block(pa.as_u64(), attr);
-
-        Ok(())
-    }
-
-    fn map_pages_inner(
-        &mut self,
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        size: usize,
-        attr: MemAttr,
-    ) -> Result<(), MapError> {
+        alloc_table: &mut F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
         Self::validate_page_mapping(ipa, pa, size)?;
-
-        let l1 = Self::l1_index(ipa);
-        self.ensure_l2_table(l1)?;
 
         for offset in (0..size as u64).step_by(Self::PAGE_SIZE as usize) {
             let cur_ipa = ipa.offset(offset);
             let cur_pa = pa.offset(offset);
-            self.map_page(cur_ipa, cur_pa, attr)?;
+            self.map_page(cur_ipa, cur_pa, attr, alloc_table)?;
         }
 
+        Ok(())
+    }
+
+    fn map_blocks_inner<F>(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        size: usize,
+        attr: MemAttr,
+        alloc_table: &mut F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        Self::validate_block_mapping(ipa, pa, size)?;
+
+        for offset in (0..size as u64).step_by(Self::BLOCK_SIZE as usize) {
+            let cur_ipa = ipa.offset(offset);
+            let cur_pa = pa.offset(offset);
+            self.map_block(cur_ipa, cur_pa, attr, alloc_table)?;
+        }
+
+        Ok(())
+    }
+
+    fn map_page<F>(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        attr: MemAttr,
+        alloc_table: &mut F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        let l1 = Self::l1_index(ipa);
+        let l2 = Self::l2_index(ipa);
+        let l3 = Self::l3_index(ipa);
+
+        let l1_entry = self.root_mut().entry_mut(l1)?;
+        let l2_table = Self::ensure_table(l1_entry, alloc_table)?;
+
+        let l2_entry = l2_table.entry_mut(l2)?;
+        let l3_table = Self::ensure_table(l2_entry, alloc_table)?;
+
+        let l3_entry = l3_table.entry_mut(l3)?;
+
+        if l3_entry.is_valid() {
+            return Err(MapError::AlreadyMapped);
+        }
+
+        *l3_entry = Descriptor::page(pa.as_u64(), attr);
+        Ok(())
+    }
+
+    fn map_block<F>(
+        &mut self,
+        ipa: IpaAddr,
+        pa: PhysAddr,
+        attr: MemAttr,
+        alloc_table: &mut F,
+    ) -> Result<(), MapError>
+    where
+        F: FnMut() -> Result<PhysAddr, MapError>,
+    {
+        let l1 = Self::l1_index(ipa);
+        let l2 = Self::l2_index(ipa);
+
+        let l1_entry = self.root_mut().entry_mut(l1)?;
+        let l2_table = Self::ensure_table(l1_entry, alloc_table)?;
+
+        let l2_entry = l2_table.entry_mut(l2)?;
+
+        if l2_entry.is_valid() {
+            return Err(MapError::AlreadyMapped);
+        }
+
+        *l2_entry = Descriptor::block(pa.as_u64(), attr);
         Ok(())
     }
 
@@ -256,6 +322,10 @@ impl<S> Stage2Tables<S> {
         pa: PhysAddr,
         size: usize,
     ) -> Result<(), MapError> {
+        if size == 0 {
+            return Err(MapError::UnalignedSize);
+        }
+
         if !ipa.as_u64().is_multiple_of(Self::PAGE_SIZE)
             || !pa.as_u64().is_multiple_of(Self::PAGE_SIZE)
         {
@@ -266,67 +336,27 @@ impl<S> Stage2Tables<S> {
             return Err(MapError::UnalignedSize);
         }
 
-        let end_ipa = ipa.offset(size as u64 - 1);
-
-        let start_l1 = Self::l1_index(ipa);
-        let end_l1 = Self::l1_index(end_ipa);
-
-        if start_l1 != end_l1 {
-            return Err(MapError::CrossesL1Boundary);
-        }
-
         Ok(())
     }
 
-    fn ensure_l3_table(&mut self, l2_index: usize) -> Result<u16, MapError> {
-        let Some(&existing) = self.l3_by_l2.get(l2_index) else {
-            return Err(MapError::IndexOutOfRange);
-        };
-
-        if existing != u16::MAX {
-            return Ok(existing);
-        }
-
-        let pool_index = self
-            .l3_pool
-            .alloc_index()
-            .map_err(|_| MapError::OutOfPageTables)?;
-
-        let table_pa = self.l3_pool.phys_addr_of(pool_index);
-
-        *self.l2.entry_mut(l2_index)? = Descriptor::table(
-            table_pa.map_err(|_| MapError::IndexOutOfRange)?.as_u64(),
-        );
-
-        if let Some(x) = self.l3_by_l2.get_mut(l2_index) {
-            *x = pool_index;
-        }
-
-        Ok(pool_index)
-    }
-
-    fn map_page(
-        &mut self,
+    fn validate_block_mapping(
         ipa: IpaAddr,
         pa: PhysAddr,
-        attr: MemAttr,
+        size: usize,
     ) -> Result<(), MapError> {
-        let l2_index = Self::l2_index(ipa);
-
-        let l3_index = Self::l3_index(ipa);
-
-        let pool_index = self.ensure_l3_table(l2_index)?;
-
-        let l3 = self
-            .l3_pool
-            .get_mut(pool_index)
-            .map_err(|_| MapError::IndexOutOfRange)?;
-
-        if l3.entry(l3_index)?.is_valid() {
-            return Err(MapError::AlreadyMapped);
+        if size == 0 {
+            return Err(MapError::UnalignedSize);
         }
 
-        *l3.entry_mut(l3_index)? = Descriptor::page(pa.as_u64(), attr);
+        if !ipa.as_u64().is_multiple_of(Self::BLOCK_SIZE)
+            || !pa.as_u64().is_multiple_of(Self::BLOCK_SIZE)
+        {
+            return Err(MapError::UnalignedAddress);
+        }
+
+        if !(size as u64).is_multiple_of(Self::BLOCK_SIZE) {
+            return Err(MapError::UnalignedSize);
+        }
 
         Ok(())
     }
@@ -351,21 +381,29 @@ impl<S> Stage2Tables<S> {
         let l2 = Self::l2_index(ipa);
         let l3 = Self::l3_index(ipa);
 
-        let l1_desc = self.root.entry(l1)?.raw();
-        let l2_desc = self.l2.entry(l2)?.raw();
+        let l1_desc = self.root_mut().entry(l1)?.raw();
 
-        let pool = *self.l3_by_l2.get(l2).ok_or(MapError::IndexOutOfRange)?;
+        let mut l2_desc = 0;
+        let mut l3_desc = None;
 
-        let l3_desc = if pool == u16::MAX {
-            None
-        } else {
-            let table = self
-                .l3_pool
-                .get(pool)
-                .map_err(|_| MapError::IndexOutOfRange)?;
+        let l1d = self.root_mut().entry(l1)?;
+        if l1d.is_table() {
+            // SAFETY:
+            // `l1d` is a table descriptor read from this walker's root table. Such table
+            // descriptors are only installed from allocator-backed child PageTable frames.
+            let l2_table = unsafe { Self::table_at_mut(l1d.output_addr())? };
+            l2_desc = l2_table.entry(l2)?.raw();
 
-            Some(table.entry(l3)?.raw())
-        };
+            let l2d = l2_table.entry(l2)?;
+            if l2d.is_table() {
+                // SAFETY:
+                // `l2d` is a table descriptor read from an allocator-backed L2 table. It was
+                // installed by this walker and points to a live L3 PageTable frame.
+                let l3_table =
+                    unsafe { Self::table_at_mut(l2d.output_addr())? };
+                l3_desc = Some(l3_table.entry(l3)?.raw())
+            }
+        }
 
         Ok(Stage2MappingDump {
             ipa,

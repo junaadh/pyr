@@ -31,8 +31,9 @@ where
     log!("linux x2          = {:#018x}", boot.guest_config().x2);
     log!("linux x3          = {:#018x}", boot.guest_config().x3);
 
-    let mut stage2 = Stage2Vm::new(cx);
-    boot.map_into(&mut stage2)
+    let mut stage2 = Stage2Vm::new(cx)
+        .unwrap_or_else(|err| fatal!("tage2 init failed: {err:?}"));
+    boot.map_into(cx, &mut stage2)
         .unwrap_or_else(|err| fatal!("linux stage2 map failed: {err:?}"));
 
     log!("stage2 root = {:#018x}", stage2.root_raw());

@@ -2,6 +2,7 @@ use crate::{
     guest::region::GuestRegion,
     stage2::{Stage2Vm, scratch},
 };
+use pyr_alloc::{context::PyrContext, traits::PageAllocator};
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
     page_table::MapError,
@@ -82,14 +83,16 @@ impl GuestMemory {
         Self::STACK_TOP_IPA.as_u64()
     }
 
-    pub fn map_region<S>(
+    pub fn map_region<A, S>(
+        cx: &mut PyrContext<A>,
         stage2: &mut Stage2Vm<S>,
         region: GuestRegion,
     ) -> Result<(), MapError>
     where
-        Stage2Vm<S>: MapGuestRegion,
+        A: PageAllocator,
+        Stage2Vm<S>: MapGuestRegion<A>,
     {
-        stage2.map_guest_region(region)
+        stage2.map_guest_region(cx, region)
     }
 
     fn copy_into_guest_ram(
@@ -141,7 +144,10 @@ impl GuestMemory {
     }
 }
 
-pub trait MapGuestRegion {
-    fn map_guest_region(&mut self, region: GuestRegion)
-    -> Result<(), MapError>;
+pub trait MapGuestRegion<A: PageAllocator> {
+    fn map_guest_region(
+        &mut self,
+        cx: &mut PyrContext<A>,
+        region: GuestRegion,
+    ) -> Result<(), MapError>;
 }

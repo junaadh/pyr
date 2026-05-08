@@ -1,3 +1,4 @@
+use pyr_alloc::{context::PyrContext, traits::PageAllocator};
 use pyr_arch::boot::info::BootResource;
 
 use crate::{
@@ -39,14 +40,18 @@ impl<'a> LoadedLinuxBoot<'a> {
         self.guest
     }
 
-    pub fn map_into<S>(
+    pub fn map_into<A, S>(
         &self,
+        cx: &mut PyrContext<A>,
         stage2: &mut Stage2Vm<S>,
     ) -> Result<(), pyr_arch::page_table::MapError>
     where
-        Stage2Vm<S>: MapGuestRegion,
+        A: PageAllocator,
+        Stage2Vm<S>: MapGuestRegion<A>,
     {
-        GuestMemory::map_region(stage2, GuestMemory::ram_window())
+        GuestMemory::map_region(cx, stage2, GuestMemory::ram_window())?;
+
+        Ok(())
     }
 }
 

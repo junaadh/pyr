@@ -1,17 +1,7 @@
-use pyr_arch::page_table::{PageTable, PageTablePool};
-
 use crate::guest::memory::GuestMemory;
-
-#[repr(align(4096))]
-pub struct Tables {
-    pub root: PageTable,
-    pub l2: PageTable,
-    pub l3: PageTablePool,
-}
 
 #[repr(C, align(4096))]
 pub struct BootScratch {
-    pub tables: Tables,
     pub _guard: [u8; 4096],
     pub guest_stack: [u8; 16 * 1024],
     pub guest_ram: [u8; GuestMemory::GUEST_RAM_SIZE],
@@ -21,11 +11,6 @@ pub struct BootScratch {
 impl BootScratch {
     pub const fn zeroed() -> Self {
         Self {
-            tables: Tables {
-                root: PageTable::zeroed(),
-                l2: PageTable::zeroed(),
-                l3: PageTablePool::new(),
-            },
             _guard: [0; 4096],
             guest_stack: [0; 16 * 1024],
             guest_ram: [0; GuestMemory::GUEST_RAM_SIZE],

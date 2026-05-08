@@ -1,3 +1,5 @@
+use crate::addr::PhysAddr;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(transparent)]
 pub struct Descriptor(u64);
@@ -59,6 +61,18 @@ impl Descriptor {
         value |= attr.stage2_bits() << 2;
 
         Self(value)
+    }
+
+    pub const fn is_table(self) -> bool {
+        self.is_valid() && (self.0 & 0b11) == 0b11
+    }
+
+    pub const fn is_block(self) -> bool {
+        self.is_valid() && (self.0 & 0b11) == 0b01
+    }
+
+    pub const fn output_addr(self) -> PhysAddr {
+        PhysAddr::new(self.0 & 0x0000_ffff_ffff_f000)
     }
 }
 
