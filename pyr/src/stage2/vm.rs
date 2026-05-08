@@ -1,3 +1,4 @@
+use pyr_alloc::{context::PyrContext, traits::PageAllocator};
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
     page_table::{
@@ -37,8 +38,10 @@ impl<S> Stage2Vm<S> {
 }
 
 impl Stage2Vm<Building> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new<A>(cx: &mut PyrContext<A>) -> Self
+    where
+        A: PageAllocator,
+    {
         let scratch = scratch::get_mut();
 
         let tables = Stage2Tables::new(

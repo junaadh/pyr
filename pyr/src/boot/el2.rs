@@ -1,8 +1,7 @@
 mod linux;
 mod tiny;
 
-use crate::{ActivePlatform, fatal, log};
-use alloc::vec::Vec;
+use crate::{ActivePlatform, fatal, log, mem};
 use pyr_arch::{
     barrier::isb,
     boot::{abi::RawBootInfo, info::BootInfo},
@@ -62,8 +61,12 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
         .hypervisor_heap()
         .unwrap_or_else(|| fatal!("Boot Info missing HypervisorHeap"));
 
-    // SAFETY: Caller is required to have `heap` memory region be valid
-    // as per the RawBootInfo ABI
+    // SAFETY:
+    //
+    // BootInfo validation succeeded, and the boot handoff says this region is
+    // the HypervisorHeap. During this phase we are still single-core, before
+    // allocator-backed dynamic boot work. The region must be writable,
+    // non-overlapping, and owned by Pyr per the RawBootInfo ABI contract.
     unsafe {
         crate::mem::HEAP.init(heap.start, heap.len);
     }
@@ -72,6 +75,19 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
         "heap initialized: start={:#x} len={:#x}",
         heap.start.as_u64(),
         heap.len
+    );
+
+    // SAFETY:
+    //
+    // This is early single-core boot. The FramePool region was supplied by the
+    // validated BootInfo memory map and is expected to be writable,
+    // non-overlapping memory owned by Pyr.
+    let mut cx = unsafe { mem::init_frame_allocator(&boot_info) };
+
+    log!(
+        "frame allocator: {}/{} frames free",
+        cx.free_frames(),
+        cx.total_frames(),
     );
 
     #[cfg(feature = "boot-linux")]
@@ -84,12 +100,12 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
                 fatal!("could not build dev LinuxBootConfig: {err:?}")
             });
 
-        boot_linux(config)
+        boot_linux(&mut cx, config)
     }
 
     #[cfg(feature = "boot-tiny")]
     {
-        tiny::boot_tiny()
+        tiny::boot_tiny(&mut cx)
     }
 }
 

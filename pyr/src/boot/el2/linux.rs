@@ -1,3 +1,5 @@
+use pyr_alloc::{context::PyrContext, traits::PageAllocator};
+
 use crate::{
     fatal,
     guest::{
@@ -9,7 +11,10 @@ use crate::{
 };
 
 #[allow(dead_code)]
-pub fn boot_linux(config: LinuxBootConfig<'_>) -> ! {
+pub fn boot_linux<A>(cx: &mut PyrContext<A>, config: LinuxBootConfig<'_>) -> !
+where
+    A: PageAllocator,
+{
     let image = config.kernel;
     let dtb = config.dtb;
     let initrd = config.initrd;
@@ -26,7 +31,7 @@ pub fn boot_linux(config: LinuxBootConfig<'_>) -> ! {
     log!("linux x2          = {:#018x}", boot.guest_config().x2);
     log!("linux x3          = {:#018x}", boot.guest_config().x3);
 
-    let mut stage2 = Stage2Vm::new();
+    let mut stage2 = Stage2Vm::new(cx);
     boot.map_into(&mut stage2)
         .unwrap_or_else(|err| fatal!("linux stage2 map failed: {err:?}"));
 

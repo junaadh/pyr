@@ -1,4 +1,7 @@
 #[cfg(feature = "boot-tiny")]
+use pyr_alloc::{context::PyrContext, traits::PageAllocator};
+
+#[cfg(feature = "boot-tiny")]
 use crate::{
     fatal,
     guest::{self, memory::GuestMemory},
@@ -7,15 +10,13 @@ use crate::{
 };
 
 #[cfg(feature = "boot-tiny")]
-pub fn boot_tiny() -> ! {
-    let mut stage2 = Stage2Vm::new();
+pub fn boot_tiny<A>(cx: &mut PyrContext<A>) -> !
+where
+    A: PageAllocator,
+{
+    let mut stage2 = Stage2Vm::new(cx);
 
     let _image = guest::tiny::load_tiny_guest();
-
-    let _dtb = guest::linux::dtb::load_dtb_blob(include_bytes!(
-        "../../../assets/qemu-virt.dtb"
-    ))
-    .unwrap_or_else(|err| fatal!("tiny dtb load failed: {err:?}"));
 
     GuestMemory::map_region(&mut stage2, GuestMemory::ram_window())
         .unwrap_or_else(|err| fatal!("tiny stage2 map filed: {err:?}"));
