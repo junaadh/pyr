@@ -22,8 +22,8 @@ pub struct RawBootInfo {
     pub memory_map_ptr: u64,
     pub memory_map_len: u64,
 
-    pub modules_ptr: u64,
-    pub modules_len: u64,
+    pub resources_ptr: u64,
+    pub resources_len: u64,
 
     pub cmdline_ptr: u64,
     pub cmdline_len: u64,
@@ -72,7 +72,7 @@ pub struct RawBootFlags(pub u64);
 impl RawBootFlags {
     pub const NONE: Self = Self(0);
     pub const HAS_MEMORY_MAP: Self = Self(1 << 0);
-    pub const HAS_MODULES: Self = Self(1 << 1);
+    pub const HAS_RESOURCES: Self = Self(1 << 1);
     pub const HAS_CMDLINE: Self = Self(1 << 2);
     pub const HAS_PLATFORM_INFO: Self = Self(1 << 3);
     pub const HAS_FIRMWARE_INFO: Self = Self(1 << 4);
@@ -104,18 +104,16 @@ pub enum RawMemoryKind {
     HypervisorHeap = 6,
     FramePool = 7,
 
-    GuestRam = 8,
-    GuestReserved = 9,
+    PyrReserved = 8,
+    BootResource = 9,
+    BootResourceReserved = 10,
 
-    Dtb = 10,
-    Initrd = 11,
+    Mmio = 11,
+    FirmwareRuntime = 12,
+    FirmwareReclaimable = 13,
 
-    Mmio = 12,
-    FirmwareRuntime = 13,
-    FirmwareReclaimable = 14,
-
-    Acpi = 15,
-    BadMemory = 16,
+    Acpi = 14,
+    BadMemory = 15,
 }
 
 #[repr(transparent)]
@@ -139,49 +137,78 @@ impl RawMemoryFlags {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct RawBootModule {
+pub struct RawBootResource {
     pub start: u64,
     pub len: u64,
 
-    pub kind: RawModuleKind,
-    pub flags: RawModuleFlags,
+    pub kind: RawBootResourceKind,
+    pub flags: RawBootResourceFlags,
 
     pub name_ptr: u64,
     pub name_len: u64,
 
-    pub load_addr_hint: u64,
+    pub media: RawBootResourceMedia,
+    pub reserved0: u32,
+
     pub align: u64,
+    pub metadata_ptr: u64,
+    pub metadata_len: u64,
 }
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RawModuleKind {
+pub enum RawBootResourceKind {
     Unknown = 0,
 
-    LinuxKernel = 1,
-    Dtb = 2,
-    Initrd = 3,
+    /// Loader-provided config for Pyr itself.
+    PyrConfig = 1,
 
-    TinyPayload = 4,
-    GuestPayload = 5,
+    /// Platform DTB describing the machine Pyr is running on.
+    PlatformDtb = 2,
 
+    /// ACPI/RSDP/etc if booted from firmware world.
+    FirmwareTable = 3,
+
+    /// Generic initial archive handed to Pyr.
+    BootArchive = 4,
+
+    /// Blob available at boot but not semantically interpreted by ABI.
+    Blob = 5,
+
+    /// Debug/symbol info for Pyr.
     SymbolTable = 6,
-    DeviceTreeOverlay = 7,
-    ConfigBlob = 8,
+
+    /// Crash log / previous boot state / diagnostics.
+    Diagnostics = 7,
+
+    /// Temporary dev-only payload. Pyr may choose to interpret it.
+    DevPayload = 8,
 }
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RawModuleFlags(pub u64);
+pub struct RawBootResourceFlags(pub u64);
 
-impl RawModuleFlags {
+impl RawBootResourceFlags {
     pub const NONE: Self = Self(0);
     pub const REQUIRED: Self = Self(1 << 0);
-    pub const COMPRESSED: Self = Self(1 << 1);
-    pub const RELOCATABLE: Self = Self(1 << 2);
+    pub const RECLAIMABLE: Self = Self(1 << 1);
+    pub const COMPRESSED: Self = Self(1 << 2);
     pub const EXECUTABLE: Self = Self(1 << 3);
+    pub const TRUSTED: Self = Self(1 << 4);
 
     pub const fn contains(self, rhs: Self) -> bool {
         (self.0 & rhs.0) == rhs.0
     }
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RawBootResourceMedia {
+    Unknown = 0,
+    Memory = 1,
+    FirmwareFile = 2,
+    Embedded = 3,
+    Disk = 4,
+    Network = 5,
 }

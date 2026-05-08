@@ -2,14 +2,10 @@ use pyr_arch::addr::PhysAddr;
 
 use crate::{
     guest::{
-        linux::{
-            boot_config::LinuxBootConfig,
-            header::{LinuxImageError, LinuxImageHeader},
-        },
+        linux::header::{LinuxImageError, LinuxImageHeader},
         memory::{GuestMemory, GuestMemoryError},
         region::GuestRegion,
     },
-    log,
     stage2::scratch,
 };
 
@@ -21,17 +17,7 @@ pub enum LinuxLoadError {
 
 pub struct LoadedLinux {
     pub image: GuestRegion,
-    pub boot: LinuxBootConfig,
-}
-
-impl LoadedLinux {
-    pub const fn image_region(&self) -> GuestRegion {
-        self.image
-    }
-
-    pub const fn boot_config(&self) -> LinuxBootConfig {
-        self.boot
-    }
+    pub header: LinuxImageHeader,
 }
 
 pub fn load_linux_image(image: &[u8]) -> Result<LoadedLinux, LinuxLoadError> {
@@ -62,22 +48,8 @@ pub fn load_linux_image(image: &[u8]) -> Result<LoadedLinux, LinuxLoadError> {
         image.len(),
     );
 
-    let boot = LinuxBootConfig::new(
-        header.entry_ipa(GuestMemory::KERNEL_LOAD_IPA),
-        GuestMemory::DTB_IPA,
-        GuestMemory::stack_top_ipa(),
-    );
-
-    log!("linux text_offset = {:#x}", header.text_offset());
-    log!("linux image_size  = {:#x}", header.image_size());
-    log!(
-        "linux entry IPA   = {:#018x}",
-        header.entry_ipa(GuestMemory::KERNEL_LOAD_IPA).as_u64()
-    );
-
     Ok(LoadedLinux {
         image: image_region,
-
-        boot,
+        header,
     })
 }

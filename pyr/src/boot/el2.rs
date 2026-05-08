@@ -60,31 +60,14 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
     #[cfg(feature = "boot-linux")]
     {
         use crate::boot::el2::linux::boot_linux;
+        use crate::guest::linux::boot_config::LinuxBootConfig;
 
-        let kernel = boot_info
-            .kernel()
-            .unwrap_or_else(|| fatal!("BootInfo missing Linux kernel module"));
+        let config = LinuxBootConfig::from_dev_boot_resources(&boot_info)
+            .unwrap_or_else(|err| {
+                fatal!("could not build dev LinuxBootConfig: {err:?}")
+            });
 
-        let dtb = boot_info
-            .dtb()
-            .unwrap_or_else(|| fatal!("BootInfo missing DTB module"));
-
-        let initrd = boot_info.initrd().map(|m| m.data());
-
-        // SAFETY:
-        //
-        // `boot_linux` assumes:
-        //
-        // - kernel image bytes are a valid AArch64 Linux Image
-        // - DTB bytes are a valid flattened device tree blob
-        // - initrd bytes (if present) remain alive during guest setup
-        // - the stage-2 mapper will establish the required guest-visible
-        //   mappings before entering EL1
-        //
-        // These invariants are upheld by the validated BootInfo module
-        // model and the boot artifact construction performed by the
-        // bootloader / bare-metal trampoline.
-        boot_linux(kernel.data(), dtb.data(), initrd)
+        boot_linux(config)
     }
 
     #[cfg(feature = "boot-tiny")]

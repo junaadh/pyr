@@ -1,13 +1,13 @@
-use core::{mem, slice};
-
 use crate::{
     addr::PhysAddr,
     boot::abi::{
         PYR_BOOT_MAGIC, PYR_BOOT_VERSION, RawBootFlags, RawBootInfo,
-        RawBootModule, RawBootSource, RawExceptionLevel, RawMachineKind,
-        RawMemoryKind, RawMemoryRegion, RawModuleKind,
+        RawBootResource, RawBootResourceKind, RawBootResourceMedia,
+        RawBootSource, RawExceptionLevel, RawMachineKind, RawMemoryKind,
+        RawMemoryRegion,
     },
 };
+use core::{mem, slice};
 
 #[derive(Debug)]
 pub enum BootInfoError {
@@ -18,11 +18,11 @@ pub enum BootInfoError {
     BadSlice,
     BadUtf8,
     MissingMemoryMap,
-    MissingRequiredModule,
+    MissingRequiredResource,
     RegionOverflow,
-    ModuleOverflow,
+    ResourceOverflow,
     UnalignedMemoryMap,
-    UnalignedModuleMap,
+    UnalignedResourceMap,
 }
 
 pub struct BootInfo<'a> {
@@ -32,7 +32,7 @@ pub struct BootInfo<'a> {
     machine: MachineKind,
     entry_el: ExceptionLevel,
     memory: MemoryMap<'a>,
-    modules: BootModules<'a>,
+    resources: BootResources<'a>,
     cmdline: Option<&'a str>,
     platform_info: Option<&'a [u8]>,
     firmware_info: Option<&'a [u8]>,
@@ -76,11 +76,11 @@ impl<'a> BootInfo<'a> {
         }
 
         // SAFETY: All raw pointers inside `raw` must be valid for the lifetime of `raw`
-        let modules = unsafe {
-            raw_slice::<RawBootModule>(
-                raw.modules_ptr,
-                raw.modules_len,
-                BootInfoError::UnalignedModuleMap,
+        let resources = unsafe {
+            raw_slice::<RawBootResource>(
+                raw.resources_ptr,
+                raw.resources_len,
+                BootInfoError::UnalignedResourceMap,
             )?
         };
 
@@ -96,7 +96,7 @@ impl<'a> BootInfo<'a> {
             machine: MachineKind::from(raw.machine_kind),
             entry_el: ExceptionLevel::from(raw.entry_el),
             memory: MemoryMap { raw: memory },
-            modules: BootModules { raw: modules },
+            resources: BootResources { raw: resources },
             cmdline,
             platform_info,
             firmware_info,
@@ -119,10 +119,6 @@ impl<'a> BootInfo<'a> {
         &self.memory
     }
 
-    pub const fn modules(&self) -> &BootModules<'a> {
-        &self.modules
-    }
-
     pub const fn cmdline(&self) -> Option<&'a str> {
         self.cmdline
     }
@@ -135,16 +131,16 @@ impl<'a> BootInfo<'a> {
         self.firmware_info
     }
 
-    pub fn kernel(&self) -> Option<BootModule<'a>> {
-        self.modules.first_of(ModuleKind::LinuxKernel)
+    pub const fn resources(&self) -> &BootResources<'a> {
+        &self.resources
     }
 
-    pub fn dtb(&self) -> Option<BootModule<'a>> {
-        self.modules.first_of(ModuleKind::Dtb)
+    pub fn resource_named(&self, name: &str) -> Option<BootResource<'a>> {
+        self.resources.named(name)
     }
 
-    pub fn initrd(&self) -> Option<BootModule<'a>> {
-        self.modules.first_of(ModuleKind::Initrd)
+    pub fn platform_dtb(&self) -> Option<BootResource<'a>> {
+        self.resources.platform_dtb()
     }
 
     pub fn hypervisor_heap(&self) -> Option<MemoryRegion> {
@@ -153,10 +149,6 @@ impl<'a> BootInfo<'a> {
 
     pub fn frame_pool(&self) -> Option<MemoryRegion> {
         self.memory.first_of(MemoryKind::FramePool)
-    }
-
-    pub fn guest_ram(&self) -> Option<MemoryRegion> {
-        self.memory.first_of(MemoryKind::GuestRam)
     }
 }
 
@@ -229,46 +221,65 @@ impl<'a> MemoryMap<'a> {
     }
 }
 
-pub struct BootModules<'a> {
-    raw: &'a [RawBootModule],
+pub struct BootResources<'a> {
+    raw: &'a [RawBootResource],
 }
 
-impl<'a> BootModules<'a> {
-    pub fn iter(&self) -> impl Iterator<Item = BootModule<'a>> + '_ {
+impl<'a> BootResources<'a> {
+    pub fn iter(&self) -> impl Iterator<Item = BootResource<'a>> + '_ {
         self.raw
             .iter()
-            .filter_map(|raw| BootModule::try_from_raw(raw).ok())
+            .filter_map(|raw| BootResource::try_from_raw(raw).ok())
     }
 
-    pub fn first_of(&self, kind: ModuleKind) -> Option<BootModule<'a>> {
+    pub fn first_of(&self, kind: BootResourceKind) -> Option<BootResource<'a>> {
         self.iter().find(|m| m.kind == kind)
     }
 
-    pub fn required(&self) -> impl Iterator<Item = BootModule<'a>> + '_ {
+    pub fn required(&self) -> impl Iterator<Item = BootResource<'a>> + '_ {
         self.iter().filter(|m| m.flags.required())
+    }
+
+    pub fn named(&self, name: &str) -> Option<BootResource<'a>> {
+        self.iter().find(|r| r.name() == Some(name))
+    }
+
+    pub fn pyr_config(&self) -> Option<BootResource<'a>> {
+        self.first_of(BootResourceKind::PyrConfig)
+    }
+
+    pub fn platform_dtb(&self) -> Option<BootResource<'a>> {
+        self.first_of(BootResourceKind::PlatformDtb)
+    }
+
+    pub fn boot_archive(&self) -> Option<BootResource<'a>> {
+        self.first_of(BootResourceKind::BootArchive)
     }
 }
 
-pub struct BootModule<'a> {
-    raw: &'a RawBootModule,
+pub struct BootResource<'a> {
+    raw: &'a RawBootResource,
     start: PhysAddr,
     end: PhysAddr,
     data: &'a [u8],
     name: Option<&'a str>,
-    kind: ModuleKind,
-    flags: ModuleFlags,
+    kind: BootResourceKind,
+    flags: ResourceFlags,
+    media: BootResourceMedia,
+    metadata: Option<&'a [u8]>,
 }
 
-impl<'a> BootModule<'a> {
-    fn try_from_raw(raw: &'a RawBootModule) -> Result<Self, BootInfoError> {
+impl<'a> BootResource<'a> {
+    fn try_from_raw(raw: &'a RawBootResource) -> Result<Self, BootInfoError> {
         let end = raw
             .start
             .checked_add(raw.len)
-            .ok_or(BootInfoError::ModuleOverflow)?;
+            .ok_or(BootInfoError::ResourceOverflow)?;
 
         // SAFETY: `raw` needs to be valid for the lifetime `a`
         let data = unsafe { raw_bytes(raw.start, raw.len)? };
         let name = optional_str(raw.name_ptr, raw.name_len)?;
+        let metadata = optional_bytes(raw.metadata_ptr, raw.metadata_len)?;
 
         Ok(Self {
             raw,
@@ -276,8 +287,10 @@ impl<'a> BootModule<'a> {
             end: PhysAddr::new(end),
             data,
             name,
-            kind: ModuleKind::from(raw.kind),
-            flags: ModuleFlags(raw.flags.0),
+            kind: BootResourceKind::from(raw.kind),
+            flags: ResourceFlags(raw.flags.0),
+            media: BootResourceMedia::from(raw.media),
+            metadata,
         })
     }
 
@@ -305,20 +318,20 @@ impl<'a> BootModule<'a> {
         self.name
     }
 
-    pub const fn kind(&self) -> ModuleKind {
+    pub const fn kind(&self) -> BootResourceKind {
         self.kind
     }
 
-    pub const fn flags(&self) -> ModuleFlags {
+    pub const fn flags(&self) -> ResourceFlags {
         self.flags
     }
 
-    pub const fn load_addr_hint(&self) -> Option<PhysAddr> {
-        if self.raw.load_addr_hint == 0 {
-            None
-        } else {
-            Some(PhysAddr::new(self.raw.load_addr_hint))
-        }
+    pub const fn media(&self) -> BootResourceMedia {
+        self.media
+    }
+
+    pub const fn metadata(&self) -> Option<&'a [u8]> {
+        self.metadata
     }
 
     pub const fn align(&self) -> Option<u64> {
@@ -388,10 +401,9 @@ pub enum MemoryKind {
     HypervisorStack,
     HypervisorHeap,
     FramePool,
-    GuestRam,
-    GuestReserved,
-    Dtb,
-    Initrd,
+    PyrReserved,
+    BootResource,
+    BootResourceReserved,
     Mmio,
     FirmwareRuntime,
     FirmwareReclaimable,
@@ -433,37 +445,59 @@ impl MemoryFlags {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ModuleKind {
+pub enum BootResourceKind {
     Unknown,
-    LinuxKernel,
-    Dtb,
-    Initrd,
-    TinyPayload,
-    GuestPayload,
+    /// Loader-provided config for Pyr itself.
+    PyrConfig,
+    /// Platform DTB describing the machine Pyr is running on.
+    PlatformDtb,
+    /// ACPI/RSDP/etc if booted from firmware world.
+    FirmwareTable,
+    /// Generic initial archive handed to Pyr.
+    BootArchive,
+    /// Blob available at boot but not semantically interpreted by ABI.
+    Blob,
+    /// Debug/symbol info for Pyr.
     SymbolTable,
-    DeviceTreeOverlay,
-    ConfigBlob,
+    /// Crash log / previous boot state / diagnostics.
+    Diagnostics,
+    /// Temporary dev-only payload. Pyr may choose to interpret it.
+    DevPayload,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ModuleFlags(pub u64);
+pub struct ResourceFlags(pub u64);
 
-impl ModuleFlags {
+impl ResourceFlags {
     pub const fn required(self) -> bool {
         self.0 & (1 << 0) != 0
     }
 
-    pub const fn compressed(self) -> bool {
+    pub const fn reclaimable(self) -> bool {
         self.0 & (1 << 1) != 0
     }
 
-    pub const fn relocatable(self) -> bool {
+    pub const fn compressed(self) -> bool {
         self.0 & (1 << 2) != 0
     }
 
     pub const fn executable(self) -> bool {
         self.0 & (1 << 3) != 0
     }
+
+    pub const fn trusted(self) -> bool {
+        self.0 & (1 << 4) != 0
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BootResourceMedia {
+    Unknown,
+    Memory,
+    FirmwareFile,
+    Embedded,
+    Disk,
+    Network,
 }
 
 fn validate_header(raw: &RawBootInfo) -> Result<(), BootInfoError> {
@@ -576,10 +610,9 @@ impl From<RawMemoryKind> for MemoryKind {
             RawMemoryKind::HypervisorStack => Self::HypervisorStack,
             RawMemoryKind::HypervisorHeap => Self::HypervisorHeap,
             RawMemoryKind::FramePool => Self::FramePool,
-            RawMemoryKind::GuestRam => Self::GuestRam,
-            RawMemoryKind::GuestReserved => Self::GuestReserved,
-            RawMemoryKind::Dtb => Self::Dtb,
-            RawMemoryKind::Initrd => Self::Initrd,
+            RawMemoryKind::PyrReserved => Self::PyrReserved,
+            RawMemoryKind::BootResource => Self::BootResource,
+            RawMemoryKind::BootResourceReserved => Self::BootResourceReserved,
             RawMemoryKind::Mmio => Self::Mmio,
             RawMemoryKind::FirmwareRuntime => Self::FirmwareRuntime,
             RawMemoryKind::FirmwareReclaimable => Self::FirmwareReclaimable,
@@ -590,18 +623,31 @@ impl From<RawMemoryKind> for MemoryKind {
     }
 }
 
-impl From<RawModuleKind> for ModuleKind {
-    fn from(value: RawModuleKind) -> Self {
+impl From<RawBootResourceKind> for BootResourceKind {
+    fn from(value: RawBootResourceKind) -> Self {
         match value {
-            RawModuleKind::LinuxKernel => Self::LinuxKernel,
-            RawModuleKind::Dtb => Self::Dtb,
-            RawModuleKind::Initrd => Self::Initrd,
-            RawModuleKind::TinyPayload => Self::TinyPayload,
-            RawModuleKind::GuestPayload => Self::GuestPayload,
-            RawModuleKind::SymbolTable => Self::SymbolTable,
-            RawModuleKind::DeviceTreeOverlay => Self::DeviceTreeOverlay,
-            RawModuleKind::ConfigBlob => Self::ConfigBlob,
-            RawModuleKind::Unknown => Self::Unknown,
+            RawBootResourceKind::Unknown => Self::Unknown,
+            RawBootResourceKind::PyrConfig => Self::PyrConfig,
+            RawBootResourceKind::PlatformDtb => Self::PlatformDtb,
+            RawBootResourceKind::FirmwareTable => Self::FirmwareTable,
+            RawBootResourceKind::BootArchive => BootResourceKind::BootArchive,
+            RawBootResourceKind::Blob => Self::Blob,
+            RawBootResourceKind::SymbolTable => Self::SymbolTable,
+            RawBootResourceKind::Diagnostics => Self::Diagnostics,
+            RawBootResourceKind::DevPayload => Self::DevPayload,
+        }
+    }
+}
+
+impl From<RawBootResourceMedia> for BootResourceMedia {
+    fn from(value: RawBootResourceMedia) -> Self {
+        match value {
+            RawBootResourceMedia::Memory => Self::Memory,
+            RawBootResourceMedia::FirmwareFile => Self::FirmwareFile,
+            RawBootResourceMedia::Embedded => Self::Embedded,
+            RawBootResourceMedia::Disk => Self::Disk,
+            RawBootResourceMedia::Network => Self::Network,
+            RawBootResourceMedia::Unknown => Self::Unknown,
         }
     }
 }

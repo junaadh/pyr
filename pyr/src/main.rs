@@ -8,10 +8,7 @@ use pyr::{
     boot::{el2, el3},
     fatal,
 };
-use pyr_arch::{
-    boot::{abi::RawBootInfo, info::BootInfo},
-    sysregs::common::CurrentEl,
-};
+use pyr_arch::{boot::abi::RawBootInfo, sysregs::common::CurrentEl};
 core::arch::global_asm!(include_str!("start.S"));
 
 /// # Safety

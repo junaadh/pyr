@@ -1,12 +1,16 @@
+use pyr_arch::boot::info::BootResource;
+
 use crate::{
     guest::{
+        config::GuestConfig,
         linux::{
             boot_config::LinuxBootConfig,
-            dtb::{DtbLoadError, LoadedDtb, load_dtb_blob},
-            initrd::{InitrdLoadError, LoadedInitrd, load_initrd_blob},
-            loader::{LinuxLoadError, LoadedLinux, load_linux_image},
+            dtb::{DtbLoadError, load_dtb_blob},
+            initrd::{InitrdLoadError, load_initrd_blob},
+            loader::{LinuxLoadError, load_linux_image},
         },
         memory::{GuestMemory, MapGuestRegion},
+        region::GuestRegion,
     },
     stage2::Stage2Vm,
 };
@@ -18,27 +22,21 @@ pub enum LinuxBootLoadError {
     Initrd(InitrdLoadError),
 }
 
-pub struct LoadedLinuxBoot {
-    linux: LoadedLinux,
-    dtb: LoadedDtb,
-    initrd: Option<LoadedInitrd>,
+pub struct LoadedLinuxBoot<'a> {
+    pub linux: GuestRegion,
+    pub dtb: GuestRegion,
+    pub initrd: Option<GuestRegion>,
+    pub boot: LinuxBootConfig<'a>,
+    pub guest: GuestConfig,
 }
 
-impl LoadedLinuxBoot {
-    pub const fn linux(&self) -> &LoadedLinux {
-        &self.linux
+impl<'a> LoadedLinuxBoot<'a> {
+    pub const fn boot_config(&self) -> &LinuxBootConfig<'a> {
+        &self.boot
     }
 
-    pub const fn dtb(&self) -> &LoadedDtb {
-        &self.dtb
-    }
-
-    pub const fn initrd(&self) -> Option<&LoadedInitrd> {
-        self.initrd.as_ref()
-    }
-
-    pub const fn boot_config(&self) -> LinuxBootConfig {
-        self.linux.boot_config()
+    pub const fn guest_config(&self) -> GuestConfig {
+        self.guest
     }
 
     pub fn map_into<S>(
@@ -52,19 +50,41 @@ impl LoadedLinuxBoot {
     }
 }
 
-pub fn load_linux_boot(
-    image: &[u8],
-    dtb: &[u8],
-    initrd: Option<&[u8]>,
-) -> Result<LoadedLinuxBoot, LinuxBootLoadError> {
-    let linux = load_linux_image(image).map_err(LinuxBootLoadError::Image)?;
-    let dtb = load_dtb_blob(dtb).map_err(LinuxBootLoadError::Dtb)?;
-    let initrd = match initrd {
-        Some(slice) => {
-            Some(load_initrd_blob(slice).map_err(LinuxBootLoadError::Initrd)?)
-        }
+pub fn load_linux_boot<'a>(
+    image: BootResource<'a>,
+    dtb: BootResource<'a>,
+    initrd: Option<BootResource<'a>>,
+) -> Result<LoadedLinuxBoot<'a>, LinuxBootLoadError> {
+    let linux =
+        load_linux_image(image.data()).map_err(LinuxBootLoadError::Image)?;
+    let loaded_dtb =
+        load_dtb_blob(dtb.data()).map_err(LinuxBootLoadError::Dtb)?;
+    let loaded_initrd = match &initrd {
+        Some(slice) => Some(
+            load_initrd_blob(slice.data())
+                .map_err(LinuxBootLoadError::Initrd)?
+                .region(),
+        ),
         None => None,
     };
 
-    Ok(LoadedLinuxBoot { linux, dtb, initrd })
+    let boot = LinuxBootConfig {
+        kernel: image,
+        dtb,
+        initrd,
+    };
+
+    let guest = GuestConfig::new(
+        linux.image.ipa().as_u64(),
+        GuestMemory::stack_top_ipa(),
+    )
+    .with_x0(loaded_dtb.region().ipa().as_u64());
+
+    Ok(LoadedLinuxBoot {
+        linux: linux.image,
+        dtb: loaded_dtb.region(),
+        initrd: loaded_initrd,
+        boot,
+        guest,
+    })
 }
