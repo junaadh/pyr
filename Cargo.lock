@@ -15,6 +15,7 @@ dependencies = [
 name = "pyr"
 version = "0.1.0"
 dependencies = [
+ "pyr-alloc",
  "pyr-arch",
  "pyr-platform-qemu",
 ]

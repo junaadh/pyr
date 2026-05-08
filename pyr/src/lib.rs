@@ -1,12 +1,16 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
+#![feature(alloc_error_handler)]
+
+extern crate alloc;
 
 pub mod boot;
 pub mod console;
 pub mod fatal;
 pub mod guest;
 pub mod hearth;
+pub mod mem;
 pub mod mmio;
 pub mod stage2;
 pub mod trap;

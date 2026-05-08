@@ -2,6 +2,7 @@ mod linux;
 mod tiny;
 
 use crate::{ActivePlatform, fatal, log};
+use alloc::vec::Vec;
 use pyr_arch::{
     barrier::isb,
     boot::{abi::RawBootInfo, info::BootInfo},
@@ -56,6 +57,22 @@ pub unsafe fn pyr_el2_entry_raw(raw: *const RawBootInfo) -> ! {
 
 fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
     init_el2(&boot_info);
+
+    let heap = boot_info
+        .hypervisor_heap()
+        .unwrap_or_else(|| fatal!("Boot Info missing HypervisorHeap"));
+
+    // SAFETY: Caller is required to have `heap` memory region be valid
+    // as per the RawBootInfo ABI
+    unsafe {
+        crate::mem::HEAP.init(heap.start, heap.len);
+    }
+
+    log!(
+        "heap initialized: start={:#x} len={:#x}",
+        heap.start.as_u64(),
+        heap.len
+    );
 
     #[cfg(feature = "boot-linux")]
     {
