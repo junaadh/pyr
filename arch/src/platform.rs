@@ -157,33 +157,4 @@ impl MmioAccess {
             kind,
         })
     }
-
-    pub fn complete(
-        self,
-        frame: &mut TrapFrame,
-        result: MmioResult,
-    ) -> Result<(), MmioError> {
-        match (self.kind, result) {
-            (_, MmioResult::Done) => Ok(()),
-
-            (MmioAccessKind::Read { target }, MmioResult::Read(value)) => {
-                match target {
-                    GuestReg::Zero => Ok(()),
-                    GuestReg::Gpr(index) => {
-                        let slot = frame
-                            .x
-                            .get_mut(index as usize)
-                            .ok_or(MmioError::InvalidSyndrome)?;
-
-                        *slot = self.width.mask(value);
-                        Ok(())
-                    }
-                }
-            }
-
-            (MmioAccessKind::Write { .. }, MmioResult::Read(_)) => {
-                Err(MmioError::InvalidSyndrome)
-            }
-        }
-    }
 }

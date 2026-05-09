@@ -5,9 +5,11 @@ use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
     boot::info::{BootInfo, MachineKind, MemoryKind},
     exception::{DataAbortIss, TrapFrame},
-    platform::{MmioAccess, MmioDevice, MmioError},
+    platform::{MmioAccess, MmioAccessKind, MmioDevice, MmioError, MmioResult},
 };
 use pyr_platform_qemu::{gic::Gic, pl011::Pl011};
+
+use crate::vcpu::Vcpu;
 
 #[derive(Clone, Copy, Debug)]
 pub struct MmioRegion {
@@ -64,6 +66,7 @@ pub struct DeviceMap {
 impl DeviceMap {
     pub fn emulate_abort(
         &self,
+        vcpu: &mut Vcpu,
         ipa: IpaAddr,
         frame: &mut TrapFrame,
         iss: DataAbortIss,
@@ -88,7 +91,7 @@ impl DeviceMap {
             }
         };
 
-        access.complete(frame, result)
+        complete_mmio(vcpu, frame, access, result)
     }
 
     pub fn from_platform_config(config: PlatformDeviceConfig) -> Self {
@@ -202,5 +205,27 @@ fn push_qemu_virt_devices(
             len: 0x1_0000,
             kind: DeviceKind::GicCpuInterface,
         });
+    }
+}
+
+fn complete_mmio(
+    vcpu: &mut Vcpu,
+    frame: &mut TrapFrame,
+    access: MmioAccess,
+    result: MmioResult,
+) -> Result<(), MmioError> {
+    match (access.kind, result) {
+        (_, MmioResult::Done) => Ok(()),
+
+        (MmioAccessKind::Read { target }, MmioResult::Read(value)) => {
+            let value = access.width.mask(value);
+
+            vcpu.write_gpr(frame, target, value)
+                .ok_or(MmioError::InvalidSyndrome)
+        }
+
+        (MmioAccessKind::Write { .. }, MmioResult::Read(_)) => {
+            Err(MmioError::InvalidSyndrome)
+        }
     }
 }

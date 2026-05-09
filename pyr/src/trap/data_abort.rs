@@ -66,7 +66,10 @@ pub fn handle(
     let hpfar = HpfarEl2::mrs();
     let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
 
-    match vm.devices().emulate_abort(IpaAddr::new(ipa), frame, iss) {
+    match vm
+        .devices()
+        .emulate_abort(vcpu, IpaAddr::new(ipa), frame, iss)
+    {
         Ok(()) => TrapOutcome::AdvancePc,
 
         Err(err) => {
