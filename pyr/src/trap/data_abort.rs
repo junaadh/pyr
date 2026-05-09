@@ -3,7 +3,7 @@ use pyr_arch::{
     sysregs::el2::FarEl2,
 };
 
-use crate::{mmio, trap::Resume};
+use crate::{mmio, trap::Resume, vcpu::Vcpu, vm::Vm};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DataAbortKind {
@@ -39,7 +39,12 @@ impl DataAbortKind {
     }
 }
 
-pub fn handle(frame: &mut TrapFrame, iss: DataAbortIss) -> Resume {
+pub fn handle(
+    _vm: &mut Vm,
+    _vcpu: &mut Vcpu,
+    frame: &mut TrapFrame,
+    iss: DataAbortIss,
+) -> Resume {
     let kind = DataAbortKind::from_dfsc(iss.dfsc);
     let far = FarEl2::mrs();
 

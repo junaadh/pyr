@@ -10,6 +10,7 @@ use crate::{
     fatal,
     guest::{self, config::GuestConfig, launch::run_vcpu, memory::GuestMemory},
     log,
+    runtime::El2Context,
     stage2::Stage2Vm,
     vcpu::{Vcpu, VcpuId},
     vm::{Vm, VmId},
@@ -50,8 +51,6 @@ where
     GuestMemory::map_region(cx, &mut stage2, GuestMemory::ram_window(&ram))
         .unwrap_or_else(|err| fatal!("tiny stage2 map failed: {err:?}"));
 
-    log!("stage2: root={:#018x}", stage2.root_raw());
-
     let stage2 = stage2.install();
 
     let guest_config = GuestConfig::new(
@@ -59,8 +58,17 @@ where
         GuestMemory::stack_top_ipa(),
     );
 
-    let mut vm = Vm::new(VmId(0), stage2);
-    let mut vcpu = Vcpu::new(VcpuId(0), vm.id(), guest_config);
+    let vm_id = VmId::from_parts(stage2.root_raw(), guest_config.entry);
+    let vm = Vm::new(vm_id, stage2);
+    let vcpu = Vcpu::new(VcpuId::from_parts(vm_id, 0), vm_id, guest_config);
 
-    run_vcpu(&mut vm, &mut vcpu);
+    log!(
+        "stage2: {:?} root={:#018x}",
+        vcpu.id(),
+        vm.stage2().root_raw()
+    );
+
+    let mut cx = El2Context::new(vm, vcpu);
+
+    run_vcpu(&mut cx)
 }

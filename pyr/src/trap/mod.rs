@@ -1,37 +1,25 @@
 mod data_abort;
+mod dispatch;
 mod hvc;
 mod psci;
 mod resume;
 
-use crate::{fatal::halt, trap::hvc::handle_hvc64};
-use pyr_arch::{
-    exception::{ExceptionClass, TrapFrame},
-    sysregs::el2::EsrEl2,
-};
+use crate::{fatal::halt, runtime::El2Context};
+use pyr_arch::exception::TrapFrame;
 pub use resume::*;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
-    let esr = EsrEl2::mrs();
+    let cx = El2Context::current();
+    let (vm, vcpu) = cx.split_mut();
 
-    let resume = match esr.decode() {
-        ExceptionClass::Hvc64 { imm16 } => handle_hvc64(frame, imm16),
-        ExceptionClass::DataAbortLower { iss } => {
-            data_abort::handle(frame, iss)
-        }
-        other => {
-            crate::log!("unhandled trap: {other:?}");
-            Resume::Halt
-        }
-    };
-
-    match resume {
+    match dispatch::handle_trap(vm, vcpu, frame) {
         Resume::ReturnToGuest => {}
         Resume::AdvancePcAndReturn => {
-            frame.elr_el2 += 4;
+            frame.elr_el2 = frame.elr_el2.wrapping_add(4);
         }
         Resume::Halt => {
-            crate::log!("halting after trap");
+            vcpu.mark_halted();
             halt()
         }
     }

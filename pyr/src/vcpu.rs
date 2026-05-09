@@ -1,7 +1,33 @@
 use crate::{guest::config::GuestConfig, vm::VmId};
+use core::fmt;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct VcpuId(pub u64);
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct VcpuId {
+    vm: VmId,
+    index: u16,
+}
+
+impl VcpuId {
+    pub const fn from_parts(vm: VmId, index: u16) -> Self {
+        Self { vm, index }
+    }
+
+    pub const fn vm(self) -> VmId {
+        self.vm
+    }
+
+    pub const fn index(self) -> u16 {
+        self.index
+    }
+}
+
+impl fmt::Debug for VcpuId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let short = (self.vm.as_u64() >> 32) as u32;
+
+        write!(f, "vcpu:{short:08x}:{:04x}", self.index)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcpuState {

@@ -10,6 +10,7 @@ use crate::{
         linux::{boot::load_linux_boot, boot_config::LinuxBootConfig},
     },
     log,
+    runtime::El2Context,
     stage2::Stage2Vm,
     vcpu::{Vcpu, VcpuId},
     vm::{Vm, VmId},
@@ -32,12 +33,20 @@ where
     boot.map_into(cx, &mut stage2)
         .unwrap_or_else(|err| fatal!("linux stage2 map failed: {err:?}"));
 
-    log!("stage2: root={:#018x}", stage2.root_raw());
-
     let stage2 = stage2.install();
+    let guest = boot.guest_config();
 
-    let mut vm = Vm::new(VmId(0), stage2);
-    let mut vcpu = Vcpu::new(VcpuId(0), vm.id(), boot.guest_config());
+    let vm_id = VmId::from_parts(stage2.root_pa().as_u64(), guest.entry);
+    let vm = Vm::new(vm_id, stage2);
+    let vcpu = Vcpu::new(VcpuId::from_parts(vm_id, 0), vm_id, guest);
 
-    run_vcpu(&mut vm, &mut vcpu)
+    log!(
+        "stage2: {:?} root={:#018x}",
+        vcpu.id(),
+        vm.stage2().root_raw()
+    );
+
+    let mut cx = El2Context::new(vm, vcpu);
+
+    run_vcpu(&mut cx)
 }
