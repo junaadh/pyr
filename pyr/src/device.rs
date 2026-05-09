@@ -45,7 +45,8 @@ impl PlatformDeviceConfig {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeviceKind {
     Pl011,
-    Gic,
+    GicDistributor,
+    GicCpuInterface,
     UnknownMmio,
 }
 
@@ -78,7 +79,7 @@ impl DeviceMap {
                 Pl011::emulate(access).map_err(MmioError::DeviceError)?
             }
 
-            DeviceKind::Gic => {
+            DeviceKind::GicDistributor | DeviceKind::GicCpuInterface => {
                 Gic::emulate(access).map_err(MmioError::DeviceError)?
             }
 
@@ -191,7 +192,7 @@ fn push_qemu_virt_devices(
         regions.push(DeviceRegion {
             base: 0x0800_0000,
             len: 0x1_0000,
-            kind: DeviceKind::Gic,
+            kind: DeviceKind::GicDistributor,
         });
     }
 
@@ -199,7 +200,7 @@ fn push_qemu_virt_devices(
         regions.push(DeviceRegion {
             base: 0x0801_0000,
             len: 0x1_0000,
-            kind: DeviceKind::Gic,
+            kind: DeviceKind::GicCpuInterface,
         });
     }
 }
