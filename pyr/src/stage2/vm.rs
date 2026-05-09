@@ -1,6 +1,6 @@
 use crate::{
     guest::{memory::MapGuestRegion, region::GuestRegion},
-    stage2::invalidate::Stage2Invalidation,
+    stage2::{invalidate::Stage2Invalidation, vmid::Vmid},
 };
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -14,12 +14,17 @@ use pyr_arch::{
 };
 
 pub struct Stage2Vm<S> {
+    vmid: Vmid,
     root: PhysFrame,
     child_tables: Vec<PhysFrame>,
     tables: Stage2Tables<S>,
 }
 
 impl<S> Stage2Vm<S> {
+    pub const fn vmid(&self) -> Vmid {
+        self.vmid
+    }
+
     pub fn dump_mapping(
         &mut self,
         ipa: IpaAddr,
@@ -81,6 +86,7 @@ impl Stage2Vm<Building> {
         // `root`, so the backing memory stays alive for the lifetime of `tables`.
         let tables = unsafe { Stage2Tables::new(root_ptr) };
         Ok(Self {
+            vmid: Vmid::BOOT,
             root,
             child_tables: Vec::new(),
             tables,
@@ -140,6 +146,7 @@ impl Stage2Vm<Building> {
         self.enable();
 
         Stage2Vm {
+            vmid: self.vmid,
             root: self.root,
             child_tables: self.child_tables,
             tables: self.tables.install(),
