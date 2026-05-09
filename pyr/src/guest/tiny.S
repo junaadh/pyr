@@ -4,22 +4,29 @@
     .global __tiny_guest_end
 
 __tiny_guest_start:
-    ldr w3, [x0]
-    
-    mov x0, #'D'
+    mov x0, #'T'
     bl __pyr_putc
 
-    mov x0, #'A'
+    mov x0, #'I'
     bl __pyr_putc
 
-    mov x0, #'B'
+    mov x0, #'N'
     bl __pyr_putc
     
     mov x3, #0x09000000
-    mov w4, #'X'
+    mov w4, #'Y'
     strb w4, [x3]
 
-    mov x0, #'Z'
+    mov x0, #' '
+    bl __pyr_putc
+
+    mov x0, #'P'
+    bl __pyr_putc
+
+    mov x0, #'Y'
+    bl __pyr_putc
+
+    mov x0, #'R'
     bl __pyr_putc
 
     mov x0, #'\n'

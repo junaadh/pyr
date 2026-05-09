@@ -82,7 +82,7 @@ unsafe impl Sync for GlobalAllocatorCell {}
 static PYR_ALLOC: GlobalAllocatorCell =
     GlobalAllocatorCell(UnsafeCell::new(PyrAllocator::uninit()));
 
-/// Initialize Pyr's physical frame allocator from BootInfo.
+/// Initialize Pyr's physical frame allocator and ram allocator from BootInfo.
 ///
 /// # Safety
 ///
@@ -93,24 +93,35 @@ static PYR_ALLOC: GlobalAllocatorCell =
 /// - interrupts cannot access the allocator
 /// - FramePool is valid writable memory owned by Pyr
 /// - FramePool does not overlap image, stack, heap, boot resources, MMIO, or firmware memory
-pub unsafe fn init_frame_allocator<'a>(
+pub unsafe fn init_allocator<'a>(
     boot_info: &BootInfo<'a>,
 ) -> PyrContext<'static, PyrAllocator> {
     // SAFETY:
     // PYR_ALLOC is only accessed here during single-core boot. The caller
     // guarantees one-time initialization and exclusive ownership.
     unsafe {
+        let alloc = &mut *PYR_ALLOC.0.get();
+
         let pool = boot_info
             .frame_pool()
             .unwrap_or_else(|| fatal!("BootInfo missing FramePool region"));
-
-        let alloc = &mut *PYR_ALLOC.0.get();
 
         alloc
             .init_frame_pool(pool.start, pool.len)
             .unwrap_or_else(|err| {
                 fatal!("frame allocator init failed: {err:?}")
             });
+
+        let guest_ram = boot_info
+            .guest_ram_arena()
+            .unwrap_or_else(|| fatal!("BootInfo missing guest RAM arena"));
+
+        alloc
+            .init_guest_ram_arena(guest_ram.start, guest_ram.len)
+            .unwrap_or_else(|err| {
+                fatal!("guest RAM arena init failed: {err:?}")
+            });
+
         PyrContext::new(alloc)
     }
 }

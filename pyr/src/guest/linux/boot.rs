@@ -1,4 +1,8 @@
-use pyr_alloc::{context::PyrContext, traits::PageAllocator};
+use pyr_alloc::{
+    context::PyrContext,
+    guest_ram::{GUEST_RAM_MIN_ALIGN, GuestRam},
+    traits::{GuestRamAllocator, PageAllocator},
+};
 use pyr_arch::boot::info::BootResource;
 
 use crate::{
@@ -10,9 +14,10 @@ use crate::{
             initrd::{InitrdLoadError, load_initrd_blob},
             loader::{LinuxLoadError, load_linux_image},
         },
-        memory::{GuestMemory, MapGuestRegion},
+        memory::{GuestMemory, GuestMemoryError, MapGuestRegion},
         region::GuestRegion,
     },
+    log,
     stage2::Stage2Vm,
 };
 
@@ -27,6 +32,7 @@ pub struct LoadedLinuxBoot<'a> {
     pub linux: GuestRegion,
     pub dtb: GuestRegion,
     pub initrd: Option<GuestRegion>,
+    pub ram: GuestRam,
     pub boot: LinuxBootConfig<'a>,
     pub guest: GuestConfig,
 }
@@ -49,27 +55,63 @@ impl<'a> LoadedLinuxBoot<'a> {
         A: PageAllocator,
         Stage2Vm<S>: MapGuestRegion<A>,
     {
-        GuestMemory::map_region(cx, stage2, GuestMemory::ram_window())?;
+        GuestMemory::map_region(
+            cx,
+            stage2,
+            GuestMemory::ram_window(&self.ram),
+        )?;
 
         Ok(())
     }
 }
 
-pub fn load_linux_boot<'a>(
+pub fn load_linux_boot<'a, A>(
+    cx: &mut PyrContext<A>,
     image: BootResource<'a>,
     dtb: BootResource<'a>,
     initrd: Option<BootResource<'a>>,
-) -> Result<LoadedLinuxBoot<'a>, LinuxBootLoadError> {
-    let linux =
-        load_linux_image(image.data()).map_err(LinuxBootLoadError::Image)?;
+) -> Result<LoadedLinuxBoot<'a>, LinuxBootLoadError>
+where
+    A: PageAllocator + GuestRamAllocator,
+{
+    let ram = cx
+        .alloc_guest_ram(
+            GuestMemory::GUEST_RAM_SIZE as u64,
+            GUEST_RAM_MIN_ALIGN,
+        )
+        .map_err(|err| {
+            crate::log!("Failed to allocate RAM for linux: {err:?}");
+            LinuxBootLoadError::Image(LinuxLoadError::GuestMemory(
+                GuestMemoryError::OutOfBounds,
+            ))
+        })?;
+
+    log!(
+        "Allocated ram for linux: size={} base={:#x}",
+        ram.size(),
+        ram.base().as_u64()
+    );
+
+    let linux = load_linux_image(image.data(), &ram)
+        .map_err(LinuxBootLoadError::Image)?;
+
+    log!("Loaded linux image to ram");
+
     let loaded_dtb =
-        load_dtb_blob(dtb.data()).map_err(LinuxBootLoadError::Dtb)?;
+        load_dtb_blob(dtb.data(), &ram).map_err(LinuxBootLoadError::Dtb)?;
+
+    log!("Loaded dtb to ram");
+
     let loaded_initrd = match &initrd {
-        Some(slice) => Some(
-            load_initrd_blob(slice.data())
-                .map_err(LinuxBootLoadError::Initrd)?
-                .region(),
-        ),
+        Some(slice) => {
+            let tmp = Some(
+                load_initrd_blob(slice.data(), &ram)
+                    .map_err(LinuxBootLoadError::Initrd)?
+                    .region(),
+            );
+            log!("Loaded initrd to ram");
+            tmp
+        }
         None => None,
     };
 
@@ -87,6 +129,7 @@ pub fn load_linux_boot<'a>(
 
     Ok(LoadedLinuxBoot {
         linux: linux.image,
+        ram,
         dtb: loaded_dtb.region(),
         initrd: loaded_initrd,
         boot,

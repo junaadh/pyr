@@ -2,6 +2,9 @@
 .align 11
 .global _start
 
+.equ __pyr_guest_ram_start, 0x50000000
+.equ __pyr_guest_ram_size,  0x08000000 // 128 MiB
+
 _start:
     ldr x0, =__boot_stack_top
     mov sp, x0
@@ -77,9 +80,9 @@ __pyr_bare_memory_map:
     .word 0
     .quad 0x43                   // READABLE | WRITABLE | ZEROED
 
-    .quad 0x40000000
-    .quad 0x40000000
-    .word 8                      // PyrReserved, temporary dev guest RAM arena
+    .quad __pyr_guest_ram_start
+    .quad __pyr_guest_ram_size
+    .word 8                      // PyrReserved / guest RAM arena backing
     .word 0
     .quad 0x43
 

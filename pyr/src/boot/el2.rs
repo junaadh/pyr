@@ -82,7 +82,7 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
     // This is early single-core boot. The FramePool region was supplied by the
     // validated BootInfo memory map and is expected to be writable,
     // non-overlapping memory owned by Pyr.
-    let mut cx = unsafe { mem::init_frame_allocator(&boot_info) };
+    let mut cx = unsafe { mem::init_allocator(&boot_info) };
 
     log!(
         "frame allocator: {}/{} frames free",

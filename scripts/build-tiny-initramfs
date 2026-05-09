@@ -66,16 +66,94 @@ mkdir -p "$(dirname "$OUT")"
   find . | sudo cpio -o -H newc --owner=0:0
 ) > "$OUT"
 
+MEMORY_RS="pyr/src/guest/memory.rs"
+
+extract_ipa() {
+  local name="$1"
+
+  grep -E "pub const ${name}: IpaAddr = IpaAddr::new\(0x[0-9a-fA-F_]+\);" "$MEMORY_RS" \
+    | sed -E 's/.*IpaAddr::new\(0x([0-9a-fA-F_]+)\).*/0x\1/' \
+    | tr -d '_'
+}
+
+extract_usize_const() {
+  local name="$1"
+
+  local expr
+  expr="$(
+    grep -E "pub const ${name}: usize =" "$MEMORY_RS" \
+      | sed -E "s/.*pub const ${name}: usize = (.*);/\1/" \
+      | tr -d '_'
+  )"
+
+  python3 - <<PY
+print(int(${expr}))
+PY
+}
+
+INITRD_IPA="$(extract_ipa INITRD_IPA)"
+INITRD_MAX_SIZE="$(extract_usize_const INITRD_MAX_SIZE)"
+DTB_IPA="$(extract_ipa DTB_IPA)"
+DTB_MAX_SIZE="$(extract_usize_const DTB_MAX_SIZE)"
+GUEST_RAM_IPA="$(extract_ipa GUEST_RAM_IPA)"
+GUEST_RAM_SIZE="$(extract_usize_const GUEST_RAM_SIZE)"
+
 SIZE="$(stat -f%z "$OUT")"
-END=$((0x78000000 + SIZE))
+
+if (( SIZE == 0 )); then
+  echo "error: generated initramfs is empty" >&2
+  exit 1
+fi
+
+if (( SIZE > INITRD_MAX_SIZE )); then
+  printf "error: initramfs too large: %d > %d\n" "$SIZE" "$INITRD_MAX_SIZE" >&2
+  exit 1
+fi
+
+INITRD_START_DEC=$((INITRD_IPA))
+INITRD_END_DEC=$((INITRD_START_DEC + SIZE))
+GUEST_RAM_START_DEC=$((GUEST_RAM_IPA))
+GUEST_RAM_END_DEC=$((GUEST_RAM_START_DEC + GUEST_RAM_SIZE))
+
+if (( INITRD_END_DEC > GUEST_RAM_END_DEC )); then
+  printf "error: initrd crosses guest RAM end: end=0x%x ram_end=0x%x\n" \
+    "$INITRD_END_DEC" "$GUEST_RAM_END_DEC" >&2
+  exit 1
+fi
+
+DTB_START_DEC=$((DTB_IPA))
+DTB_END_MAX_DEC=$((DTB_START_DEC + DTB_MAX_SIZE))
+
+if (( DTB_END_MAX_DEC > GUEST_RAM_END_DEC )); then
+  printf "error: DTB max region crosses guest RAM end: end=0x%x ram_end=0x%x\n" \
+    "$DTB_END_MAX_DEC" "$GUEST_RAM_END_DEC" >&2
+  exit 1
+fi
 
 printf "built %s (%s bytes)\n" "$OUT" "$SIZE"
-printf "initrd-start = 0x%x\n" 0x78000000
-printf "initrd-end   = 0x%x\n" "$END"
+printf "initrd-start = 0x%x\n" "$INITRD_START_DEC"
+printf "initrd-end   = 0x%x\n" "$INITRD_END_DEC"
+printf "dtb-ipa      = 0x%x\n" "$DTB_START_DEC"
 
-sed "s/__INITRD_END__/$(printf '0x%x' "$END")/" \
+sed \
+  -e "s/__INITRD_START__/$(printf '0x%x' "$INITRD_START_DEC")/" \
+  -e "s/__INITRD_END__/$(printf '0x%x' "$INITRD_END_DEC")/" \
   pyr/assets/qemu-virt.dts.in > pyr/assets/qemu-virt.dts
 
 dtc -I dts -O dtb \
   -o pyr/assets/qemu-virt.dtb \
   pyr/assets/qemu-virt.dts
+
+DTB_SIZE="$(stat -f%z pyr/assets/qemu-virt.dtb)"
+
+if (( DTB_SIZE == 0 )); then
+  echo "error: generated DTB is empty" >&2
+  exit 1
+fi
+
+if (( DTB_SIZE > DTB_MAX_SIZE )); then
+  printf "error: DTB too large: %d > %d\n" "$DTB_SIZE" "$DTB_MAX_SIZE" >&2
+  exit 1
+fi
+
+printf "built pyr/assets/qemu-virt.dtb (%s bytes)\n" "$DTB_SIZE"

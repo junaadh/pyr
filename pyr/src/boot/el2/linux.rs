@@ -1,4 +1,7 @@
-use pyr_alloc::{context::PyrContext, traits::PageAllocator};
+use pyr_alloc::{
+    context::PyrContext,
+    traits::{GuestRamAllocator, PageAllocator},
+};
 
 use crate::{
     fatal,
@@ -13,19 +16,16 @@ use crate::{
 #[allow(dead_code)]
 pub fn boot_linux<A>(cx: &mut PyrContext<A>, config: LinuxBootConfig<'_>) -> !
 where
-    A: PageAllocator,
+    A: PageAllocator + GuestRamAllocator,
 {
     let image = config.kernel;
     let dtb = config.dtb;
     let initrd = config.initrd;
 
-    let boot = load_linux_boot(image, dtb, initrd)
+    let boot = load_linux_boot(cx, image, dtb, initrd)
         .unwrap_or_else(|err| fatal!("linux boot load failed: {err:?}"));
 
-    log!(
-        "linux dtb IPA     = {:#018x}",
-        boot.boot_config().dtb.start().as_u64()
-    );
+    log!("linux dtb IPA     = {:#018x}", boot.dtb.ipa().as_u64());
     log!("linux x0          = {:#018x}", boot.guest_config().x0);
     log!("linux x1          = {:#018x}", boot.guest_config().x1);
     log!("linux x2          = {:#018x}", boot.guest_config().x2);

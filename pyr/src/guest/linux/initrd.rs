@@ -1,3 +1,5 @@
+use pyr_alloc::guest_ram::GuestRam;
+
 use crate::guest::{
     memory::{GuestMemory, GuestMemoryError},
     region::GuestRegion,
@@ -29,14 +31,17 @@ impl LoadedInitrd {
 
 pub fn load_initrd_blob(
     initrd: &[u8],
+    ram: &GuestRam,
 ) -> Result<LoadedInitrd, InitrdLoadError> {
-    let region = GuestMemory::load_initrd(initrd).map_err(|err| match err {
-        GuestMemoryError::InitrdTooLarge => InitrdLoadError::TooLarge,
+    let region =
+        GuestMemory::load_initrd(ram, initrd).map_err(|err| match err {
+            GuestMemoryError::InitrdTooLarge => InitrdLoadError::TooLarge,
 
-        GuestMemoryError::RegionOutOfGuestRam
-        | GuestMemoryError::ImageTooLarge
-        | GuestMemoryError::DtbTooLarge => InitrdLoadError::OutOfGuestRam,
-    })?;
+            GuestMemoryError::RegionOutOfGuestRam
+            | GuestMemoryError::OutOfBounds
+            | GuestMemoryError::ImageTooLarge
+            | GuestMemoryError::DtbTooLarge => InitrdLoadError::OutOfGuestRam,
+        })?;
 
     Ok(LoadedInitrd { region })
 }

@@ -22,4 +22,12 @@ impl PhysAddr {
     pub const fn align_up(self, align: u64) -> Self {
         Self((self.0 + align - 1) & !(align - 1))
     }
+
+    pub const fn as_ptr(self) -> *const u8 {
+        self.0 as *const u8
+    }
+
+    pub const fn as_mut_ptr(self) -> *mut u8 {
+        self.0 as *mut u8
+    }
 }

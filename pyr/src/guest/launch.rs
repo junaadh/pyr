@@ -44,15 +44,6 @@ pub fn enter_el1_guest(config: GuestConfig) -> ! {
     crate::log!("CNTHCTL_EL2 = {:#018x}", CnthctlEl2::mrs().raw());
     crate::log!("CNTVOFF_EL2 = {:#018x}", CntvoffEl2::mrs().raw());
 
-    let base = crate::stage2::scratch::guest_ram_base();
-
-    for i in 0..4 {
-        // SAFETY: Intentional read unaligned for debugging linux image load
-        let word =
-            unsafe { core::ptr::read_unaligned((base as *const u32).add(i)) };
-        crate::log!("kernel[{i}] = {word:#010x}");
-    }
-
     // SAFETY: ELR_EL2 points to guest entry, SP_EL1 is initialized, and SPSR_EL2 selects EL1h
     unsafe { eret_with_args(config) }
 }

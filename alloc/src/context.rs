@@ -1,4 +1,9 @@
-use crate::{error::AllocError, frame::PhysFrame, traits::PageAllocator};
+use crate::{
+    error::AllocError,
+    frame::PhysFrame,
+    guest_ram::GuestRam,
+    traits::{GuestRamAllocator, PageAllocator},
+};
 
 pub struct PyrContext<'a, A> {
     alloc: &'a mut A,
@@ -46,5 +51,24 @@ where
     #[inline]
     pub fn used_frames(&self) -> usize {
         self.alloc.used_frames()
+    }
+}
+
+impl<A> PyrContext<'_, A>
+where
+    A: GuestRamAllocator,
+{
+    #[inline]
+    pub fn alloc_guest_ram(
+        &mut self,
+        size: u64,
+        align: u64,
+    ) -> Result<GuestRam, AllocError> {
+        self.alloc.alloc_guest_ram(size, align)
+    }
+
+    #[inline]
+    pub fn free_guest_ram(&mut self, ram: GuestRam) -> Result<(), AllocError> {
+        self.alloc.free_guest_ram(ram)
     }
 }

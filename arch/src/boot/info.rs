@@ -150,6 +150,10 @@ impl<'a> BootInfo<'a> {
     pub fn frame_pool(&self) -> Option<MemoryRegion> {
         self.memory.first_of(MemoryKind::FramePool)
     }
+
+    pub fn guest_ram_arena(&self) -> Option<MemoryRegion> {
+        self.memory.first_of(MemoryKind::PyrReserved)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

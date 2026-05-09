@@ -1,4 +1,4 @@
-use crate::{error::AllocError, frame::PhysFrame};
+use crate::{error::AllocError, frame::PhysFrame, guest_ram::GuestRam};
 
 pub trait PageAllocator {
     fn alloc_frame(&mut self) -> Result<PhysFrame, AllocError>;
@@ -21,4 +21,13 @@ pub trait PageAllocator {
     fn is_empty(&self) -> bool {
         self.free_frames() == 0
     }
+}
+
+pub trait GuestRamAllocator {
+    fn alloc_guest_ram(
+        &mut self,
+        size: u64,
+        align: u64,
+    ) -> Result<GuestRam, AllocError>;
+    fn free_guest_ram(&mut self, ram: GuestRam) -> Result<(), AllocError>;
 }
