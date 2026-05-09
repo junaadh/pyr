@@ -1,7 +1,10 @@
 mod linux;
 mod tiny;
 
-use crate::{ActivePlatform, device::PlatformDeviceConfig, fatal, log, mem};
+use crate::{
+    ActivePlatform, context::HypervisorContext, device::PlatformDeviceConfig,
+    fatal, log, mem,
+};
 use pyr_arch::{
     barrier::isb,
     boot::{abi::RawBootInfo, info::BootInfo},
@@ -79,12 +82,13 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
     // This is early single-core boot. The FramePool region was supplied by the
     // validated BootInfo memory map and is expected to be writable,
     // non-overlapping memory owned by Pyr.
-    let mut cx = unsafe { mem::init_allocator(&boot_info) };
+    let mut cx =
+        HypervisorContext::new(unsafe { mem::init_allocator(&boot_info) });
 
     log!(
         "mem: frame free={} total={}",
-        cx.free_frames(),
-        cx.total_frames(),
+        cx.mem.free_frames(),
+        cx.mem.total_frames(),
     );
 
     let devices = PlatformDeviceConfig::from_boot_info(&boot_info);

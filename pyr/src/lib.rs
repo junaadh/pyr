@@ -7,6 +7,7 @@ extern crate alloc;
 
 pub mod boot;
 pub mod console;
+pub mod context;
 pub mod device;
 pub mod fatal;
 pub mod guest;

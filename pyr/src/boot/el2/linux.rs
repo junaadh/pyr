@@ -1,9 +1,7 @@
-use pyr_alloc::{
-    context::PyrContext,
-    traits::{GuestRamAllocator, PageAllocator},
-};
+use pyr_alloc::traits::{GuestRamAllocator, PageAllocator};
 
 use crate::{
+    context::HypervisorContext,
     device::PlatformDeviceConfig,
     fatal,
     guest::linux::{boot::load_linux_boot, boot_config::LinuxBootConfig},
@@ -16,7 +14,7 @@ use crate::{
 
 #[allow(dead_code)]
 pub fn boot_linux<A>(
-    cx: &mut PyrContext<A>,
+    cx: &mut HypervisorContext<A>,
     config: LinuxBootConfig<'_>,
     devices: PlatformDeviceConfig,
 ) -> !

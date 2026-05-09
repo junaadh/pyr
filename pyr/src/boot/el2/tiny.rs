@@ -1,12 +1,12 @@
 #[cfg(feature = "boot-tiny")]
 use pyr_alloc::{
-    context::PyrContext,
     guest_ram::GUEST_RAM_MIN_ALIGN,
     traits::{GuestRamAllocator, PageAllocator},
 };
 
 #[cfg(feature = "boot-tiny")]
 use crate::{
+    context::HypervisorContext,
     device::PlatformDeviceConfig,
     fatal,
     guest::{self, config::GuestConfig, memory::GuestMemory},
@@ -18,11 +18,15 @@ use crate::{
 };
 
 #[cfg(feature = "boot-tiny")]
-pub fn boot_tiny<A>(cx: &mut PyrContext<A>, devices: PlatformDeviceConfig) -> !
+pub fn boot_tiny<A>(
+    cx: &mut HypervisorContext<A>,
+    devices: PlatformDeviceConfig,
+) -> !
 where
     A: PageAllocator + GuestRamAllocator,
 {
     let ram = cx
+        .mem
         .alloc_guest_ram(
             GuestMemory::GUEST_RAM_SIZE as u64,
             GUEST_RAM_MIN_ALIGN,

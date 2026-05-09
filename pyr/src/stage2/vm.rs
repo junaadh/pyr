@@ -1,10 +1,11 @@
 use crate::{
+    context::HypervisorContext,
     guest::{memory::MapGuestRegion, region::GuestRegion},
     stage2::{invalidate::Stage2Invalidation, vmid::Vmid},
 };
 use alloc::vec::Vec;
 use core::ptr::NonNull;
-use pyr_alloc::{context::PyrContext, frame::PhysFrame, traits::PageAllocator};
+use pyr_alloc::{frame::PhysFrame, traits::PageAllocator};
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
     page_table::{
@@ -46,13 +47,14 @@ impl<S> Stage2Vm<S> {
     }
 
     fn alloc_table<A>(
-        cx: &mut PyrContext<A>,
+        cx: &mut HypervisorContext<A>,
         child_tables: &mut Vec<PhysFrame>,
     ) -> Result<PhysAddr, MapError>
     where
         A: PageAllocator,
     {
         let frame = cx
+            .mem
             .alloc_zeroed_frame()
             .map_err(|_| MapError::OutOfPageTables)?;
 
@@ -65,11 +67,12 @@ impl<S> Stage2Vm<S> {
 }
 
 impl Stage2Vm<Building> {
-    pub fn new<A>(cx: &mut PyrContext<A>) -> Result<Self, MapError>
+    pub fn new<A>(cx: &mut HypervisorContext<A>) -> Result<Self, MapError>
     where
         A: PageAllocator,
     {
         let root = cx
+            .mem
             .alloc_zeroed_frame()
             .map_err(|_| MapError::OutOfPageTables)?;
 
@@ -86,7 +89,7 @@ impl Stage2Vm<Building> {
         // `root`, so the backing memory stays alive for the lifetime of `tables`.
         let tables = unsafe { Stage2Tables::new(root_ptr) };
         Ok(Self {
-            vmid: Vmid::BOOT,
+            vmid: cx.alloc_vmid(),
             root,
             child_tables: Vec::new(),
             tables,
@@ -95,7 +98,7 @@ impl Stage2Vm<Building> {
 
     pub fn map_guest_ram<A>(
         &mut self,
-        cx: &mut PyrContext<A>,
+        cx: &mut HypervisorContext<A>,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
@@ -108,7 +111,7 @@ impl Stage2Vm<Building> {
 
     pub fn map_pages<A>(
         &mut self,
-        cx: &mut PyrContext<A>,
+        cx: &mut HypervisorContext<A>,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
@@ -126,7 +129,7 @@ impl Stage2Vm<Building> {
 
     pub fn map_blocks<A>(
         &mut self,
-        cx: &mut PyrContext<A>,
+        cx: &mut HypervisorContext<A>,
         ipa: IpaAddr,
         pa: PhysAddr,
         size: usize,
@@ -169,7 +172,7 @@ impl Stage2Vm<Installed> {
 impl<A: PageAllocator> MapGuestRegion<A> for Stage2Vm<Building> {
     fn map_guest_region(
         &mut self,
-        cx: &mut PyrContext<A>,
+        cx: &mut HypervisorContext<A>,
         region: GuestRegion,
     ) -> Result<(), MapError> {
         self.map_pages(

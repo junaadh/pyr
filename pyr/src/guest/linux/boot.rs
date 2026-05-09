@@ -1,11 +1,11 @@
 use pyr_alloc::{
-    context::PyrContext,
     guest_ram::{GUEST_RAM_MIN_ALIGN, GuestRam},
     traits::{GuestRamAllocator, PageAllocator},
 };
 use pyr_arch::boot::info::BootResource;
 
 use crate::{
+    context::HypervisorContext,
     guest::{
         config::GuestConfig,
         linux::{
@@ -48,7 +48,7 @@ impl<'a> LoadedLinuxBoot<'a> {
 
     pub fn map_into<A, S>(
         &self,
-        cx: &mut PyrContext<A>,
+        cx: &mut HypervisorContext<A>,
         stage2: &mut Stage2Vm<S>,
     ) -> Result<(), pyr_arch::page_table::MapError>
     where
@@ -66,7 +66,7 @@ impl<'a> LoadedLinuxBoot<'a> {
 }
 
 pub fn load_linux_boot<'a, A>(
-    cx: &mut PyrContext<A>,
+    cx: &mut HypervisorContext<A>,
     image: BootResource<'a>,
     dtb: BootResource<'a>,
     initrd: Option<BootResource<'a>>,
@@ -75,6 +75,7 @@ where
     A: PageAllocator + GuestRamAllocator,
 {
     let ram = cx
+        .mem
         .alloc_guest_ram(
             GuestMemory::GUEST_RAM_SIZE as u64,
             GUEST_RAM_MIN_ALIGN,
