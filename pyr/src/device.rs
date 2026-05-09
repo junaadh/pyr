@@ -59,26 +59,6 @@ pub struct DeviceMap {
 }
 
 impl DeviceMap {
-    pub fn from_boot_info(boot: &BootInfo<'_>) -> Self {
-        let mut regions = Vec::new();
-
-        for region in boot.memory().regions_of(MemoryKind::Mmio) {
-            let kind = classify_mmio_region(
-                boot.machine(),
-                region.start.as_u64(),
-                region.len,
-            );
-
-            regions.push(DeviceRegion {
-                base: region.start.as_u64(),
-                len: region.len,
-                kind,
-            });
-        }
-
-        Self { regions }
-    }
-
     pub fn emulate_abort(
         &self,
         ipa: IpaAddr,
@@ -93,15 +73,7 @@ impl DeviceMap {
             .find(|region| region.contains(raw))
             .ok_or(MmioError::UnknownDevice)?;
 
-        let access_base = match region.kind {
-            DeviceKind::Pl011 => Pl011::BASE,
-            DeviceKind::Gic => {
-                Gic::base_for(raw).ok_or(MmioError::UnknownDevice)?
-            }
-            DeviceKind::UnknownMmio => return Err(MmioError::UnknownDevice),
-        };
-
-        let access = MmioAccess::from_abort(ipa, access_base, frame, iss)?;
+        let access = MmioAccess::from_abort(ipa, region.base(), frame, iss)?;
 
         let result = match region.kind {
             DeviceKind::Pl011 => {
@@ -121,19 +93,23 @@ impl DeviceMap {
     }
 
     pub fn from_platform_config(config: PlatformDeviceConfig) -> Self {
-        let regions = config
+        let mut regions = Vec::new();
+        config
             .mmio
             .into_iter()
-            .map(|region| DeviceRegion {
-                base: region.base.as_u64(),
-                len: region.len,
-                kind: classify_mmio_region(
+            .filter(|_| {
+                matches!(
                     config.machine,
+                    MachineKind::QemuVirt | MachineKind::GenericArmVirt
+                )
+            })
+            .for_each(|region| {
+                push_qemu_virt_devices(
+                    &mut regions,
                     region.base.as_u64(),
                     region.len,
-                ),
-            })
-            .collect();
+                )
+            });
 
         Self { regions }
     }
@@ -161,18 +137,34 @@ impl DeviceRegion {
     }
 }
 
-fn classify_mmio_region(
-    machine: MachineKind,
+fn push_qemu_virt_devices(
+    regions: &mut Vec<DeviceRegion>,
     base: u64,
-    _len: u64,
-) -> DeviceKind {
-    match machine {
-        MachineKind::QemuVirt | MachineKind::GenericArmVirt => match base {
-            0x0900_0000 => DeviceKind::Pl011,
-            0x0800_0000 => DeviceKind::Gic,
-            _ => DeviceKind::UnknownMmio,
-        },
+    len: u64,
+) {
+    let end = base + len;
 
-        _ => DeviceKind::UnknownMmio,
+    if base <= 0x0900_0000 && 0x0900_1000 <= end {
+        regions.push(DeviceRegion {
+            base: 0x0900_0000,
+            len: 0x1000,
+            kind: DeviceKind::Pl011,
+        });
+    }
+
+    if base <= 0x0800_0000 && 0x0801_0000 <= end {
+        regions.push(DeviceRegion {
+            base: 0x0800_0000,
+            len: 0x1_0000,
+            kind: DeviceKind::Gic,
+        });
+    }
+
+    if base <= 0x0801_0000 && 0x0802_0000 <= end {
+        regions.push(DeviceRegion {
+            base: 0x0801_0000,
+            len: 0x1_0000,
+            kind: DeviceKind::Gic,
+        });
     }
 }

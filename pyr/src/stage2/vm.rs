@@ -148,74 +148,9 @@ impl Stage2Vm<Building> {
     }
 }
 
-impl Stage2Vm<Installed> {
-    pub fn map_guest_ram<A>(
-        &mut self,
-        cx: &mut PyrContext<A>,
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        size: usize,
-    ) -> Result<(), MapError>
-    where
-        A: PageAllocator,
-    {
-        self.map_pages(cx, ipa, pa, Self::align_4k(size), MemAttr::Normal)
-    }
-
-    pub fn map_pages<A>(
-        &mut self,
-        cx: &mut PyrContext<A>,
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        size: usize,
-        attr: MemAttr,
-    ) -> Result<(), MapError>
-    where
-        A: PageAllocator,
-    {
-        let child_tables = &mut self.child_tables;
-
-        self.tables.map_pages(ipa, pa, size, attr, || {
-            Self::alloc_table(cx, child_tables)
-        })
-    }
-
-    pub fn map_blocks<A>(
-        &mut self,
-        cx: &mut PyrContext<A>,
-        ipa: IpaAddr,
-        pa: PhysAddr,
-        size: usize,
-        attr: MemAttr,
-    ) -> Result<(), MapError>
-    where
-        A: PageAllocator,
-    {
-        let child_tables = &mut self.child_tables;
-
-        self.tables.map_blocks(ipa, pa, size, attr, || {
-            Self::alloc_table(cx, child_tables)
-        })
-    }
-}
+impl Stage2Vm<Installed> {}
 
 impl<A: PageAllocator> MapGuestRegion<A> for Stage2Vm<Building> {
-    fn map_guest_region(
-        &mut self,
-        cx: &mut PyrContext<A>,
-        region: GuestRegion,
-    ) -> Result<(), MapError> {
-        self.map_pages(
-            cx,
-            region.ipa(),
-            region.pa(),
-            Self::align_4k(region.size()),
-            region.attr(),
-        )
-    }
-}
-
-impl<A: PageAllocator> MapGuestRegion<A> for Stage2Vm<Installed> {
     fn map_guest_region(
         &mut self,
         cx: &mut PyrContext<A>,
