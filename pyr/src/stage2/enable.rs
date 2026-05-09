@@ -1,15 +1,17 @@
 use pyr_arch::{
-    addr::PhysAddr,
     barrier::{dsb_ish, isb},
+    page_table::Installed,
     sysregs::el2::{HcrEl2, VtcrEl2, VttbrEl2},
 };
 
-pub fn enable_stage2(root_pa: u64) {
-    configure_translation(root_pa);
+use crate::stage2::Stage2Vm;
+
+pub fn enable_stage2(stage2: &Stage2Vm<Installed>) {
+    configure_translation(stage2);
     enable_hcr_vm();
 }
 
-fn configure_translation(root_pa: u64) {
+fn configure_translation(stage2: &Stage2Vm<Installed>) {
     VtcrEl2::new()
         .with_t0sz(25)
         .with_sl0_level1()
@@ -19,7 +21,7 @@ fn configure_translation(root_pa: u64) {
         .with_irgn0_write_back()
         .msr();
 
-    VttbrEl2::from_baddr(PhysAddr::new(root_pa)).msr();
+    VttbrEl2::from_vmid_baddr(stage2.vmid().as_u16(), stage2.root_pa()).msr();
 
     dsb_ish();
     isb();

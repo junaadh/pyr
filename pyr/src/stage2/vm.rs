@@ -143,24 +143,26 @@ impl Stage2Vm<Building> {
     }
 
     pub fn install(self) -> Stage2Vm<Installed> {
-        self.enable();
-
-        Stage2Vm {
+        let stage2 = Stage2Vm {
             vmid: self.vmid,
             root: self.root,
             child_tables: self.child_tables,
             tables: self.tables.install(),
-        }
-    }
+        };
 
-    pub fn enable(&self) {
-        super::enable::enable_stage2(self.root_raw());
+        stage2.enable();
+
+        stage2
     }
 }
 
 impl Stage2Vm<Installed> {
     pub fn flush_all_translations(&self) {
         Stage2Invalidation::flush_all();
+    }
+
+    pub fn enable(&self) {
+        super::enable::enable_stage2(self);
     }
 }
 

@@ -5,12 +5,22 @@ use crate::addr::PhysAddr;
 pub struct VttbrEl2(u64);
 
 impl VttbrEl2 {
+    pub const BADDR_MASK: u64 = 0x0000_ffff_ffff_f000;
+    pub const VMID_SHIFT: u64 = 48;
+
     pub const fn new(value: u64) -> Self {
         Self(value)
     }
 
     pub const fn from_baddr(base: PhysAddr) -> Self {
-        Self(base.as_u64())
+        Self(base.as_u64() & Self::BADDR_MASK)
+    }
+
+    pub const fn from_vmid_baddr(vmid: u16, base: PhysAddr) -> Self {
+        let vmid = (vmid as u64) << Self::VMID_SHIFT;
+        let baddr = base.as_u64() & Self::BADDR_MASK;
+
+        Self(vmid | baddr)
     }
 
     pub fn mrs() -> Self {
@@ -41,5 +51,13 @@ impl VttbrEl2 {
 
     pub const fn raw(self) -> u64 {
         self.0
+    }
+
+    pub const fn vmid(self) -> u16 {
+        (self.0 >> Self::VMID_SHIFT) as u16
+    }
+
+    pub const fn baddr(self) -> PhysAddr {
+        PhysAddr::new(self.0 & Self::BADDR_MASK)
     }
 }
