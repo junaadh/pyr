@@ -1,4 +1,7 @@
-use crate::guest::{memory::MapGuestRegion, region::GuestRegion};
+use crate::{
+    guest::{memory::MapGuestRegion, region::GuestRegion},
+    stage2::invalidate::Stage2Invalidation,
+};
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use pyr_alloc::{context::PyrContext, frame::PhysFrame, traits::PageAllocator};
@@ -148,7 +151,11 @@ impl Stage2Vm<Building> {
     }
 }
 
-impl Stage2Vm<Installed> {}
+impl Stage2Vm<Installed> {
+    pub fn flush_all_translations(&self) {
+        Stage2Invalidation::flush_all();
+    }
+}
 
 impl<A: PageAllocator> MapGuestRegion<A> for Stage2Vm<Building> {
     fn map_guest_region(
