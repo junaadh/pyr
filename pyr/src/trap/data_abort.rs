@@ -1,5 +1,5 @@
 use crate::{
-    trap::Resume,
+    trap::TrapOutcome,
     vcpu::{Vcpu, VcpuExitReason},
     vm::Vm,
 };
@@ -48,7 +48,7 @@ pub fn handle(
     vcpu: &mut Vcpu,
     frame: &mut TrapFrame,
     iss: DataAbortIss,
-) -> Resume {
+) -> TrapOutcome {
     let kind = DataAbortKind::from_dfsc(iss.dfsc);
     let far = FarEl2::mrs();
 
@@ -60,15 +60,14 @@ pub fn handle(
             far.raw()
         );
 
-        vcpu.stop(VcpuExitReason::UnhandledTrap);
-        return Resume::Halt;
+        return TrapOutcome::Exit(VcpuExitReason::UnhandledTrap);
     }
 
     let hpfar = HpfarEl2::mrs();
     let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
 
     match vm.devices().emulate_abort(IpaAddr::new(ipa), frame, iss) {
-        Ok(()) => Resume::AdvancePcAndReturn,
+        Ok(()) => TrapOutcome::AdvancePc,
 
         Err(err) => {
             crate::log!(
@@ -77,8 +76,7 @@ pub fn handle(
                 vcpu.id()
             );
 
-            vcpu.stop(VcpuExitReason::MmioError);
-            Resume::Halt
+            TrapOutcome::Exit(VcpuExitReason::MmioError)
         }
     }
 }

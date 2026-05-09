@@ -7,21 +7,21 @@ pub use abi::*;
 pub use caps::*;
 use pyr_arch::exception::TrapFrame;
 
-use crate::{hearth::error::HearthError, trap::Resume};
+use crate::{hearth::error::HearthError, trap::TrapOutcome};
 
-pub fn handle_hvc(frame: &mut TrapFrame, imm16: u16) -> Resume {
+pub fn handle_hvc(frame: &mut TrapFrame, imm16: u16) -> TrapOutcome {
     let call = HvcCall::from_frame(frame, imm16);
     let caps = CapSet::debug_guest();
 
     match dispatch(&call, frame, caps) {
         Ok(()) => {
             frame.x[0] = 0;
-            Resume::ReturnToGuest
+            TrapOutcome::Return
         }
         Err(err) => {
             crate::log!("hearth.error: {err:?}");
             frame.x[0] = err.code();
-            Resume::Halt
+            TrapOutcome::Exit(crate::vcpu::VcpuExitReason::UnhandledTrap)
         }
     }
 }

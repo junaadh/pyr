@@ -1,4 +1,4 @@
-use crate::trap::Resume;
+use crate::trap::TrapOutcome;
 use pyr_arch::exception::TrapFrame;
 
 pub struct Psci;
@@ -28,36 +28,36 @@ impl Psci {
         )
     }
 
-    pub fn handle_call(frame: &mut TrapFrame) -> Resume {
+    pub fn handle_call(frame: &mut TrapFrame) -> TrapOutcome {
         match frame.x[0] {
             Self::PSCI_VERSION => {
                 frame.x[0] = 0x0001_0000; // PSCI 1.0
-                Resume::ReturnToGuest
+                TrapOutcome::Return
             }
 
             Self::PSCI_MIGRATE_INFO_TYPE => {
                 frame.x[0] = 2; // Trusted OS migration not required
-                Resume::ReturnToGuest
+                TrapOutcome::Return
             }
 
             Self::PSCI_AFFINITY_INFO => {
                 frame.x[0] = 0; // CPU is on
-                Resume::ReturnToGuest
+                TrapOutcome::Return
             }
 
             Self::PSCI_CPU_ON => {
                 frame.x[0] = Self::PSCI_NOT_SUPPORTED;
-                Resume::ReturnToGuest
+                TrapOutcome::Return
             }
 
             Self::PSCI_SYSTEM_OFF | Self::PSCI_SYSTEM_RESET => {
                 crate::log!("psci: power/reset requested");
-                Resume::Halt
+                TrapOutcome::Exit(crate::vcpu::VcpuExitReason::InternalError)
             }
 
             Self::PSCI_FEATURES => {
                 Self::handle_psci_features(frame);
-                Resume::ReturnToGuest
+                TrapOutcome::Return
             }
 
             unreachable => unreachable!(

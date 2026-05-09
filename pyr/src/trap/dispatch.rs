@@ -4,7 +4,7 @@ use pyr_arch::{
 };
 
 use crate::{
-    trap::{Resume, data_abort, hvc},
+    trap::{TrapOutcome, data_abort, hvc},
     vcpu::{Vcpu, VcpuExitReason},
     vm::Vm,
 };
@@ -13,7 +13,7 @@ pub fn handle_trap(
     vm: &mut Vm,
     vcpu: &mut Vcpu,
     frame: &mut TrapFrame,
-) -> Resume {
+) -> TrapOutcome {
     let esr = EsrEl2::mrs();
 
     match esr.decode() {
@@ -31,8 +31,7 @@ pub fn handle_trap(
                 vcpu.id()
             );
 
-            vcpu.stop(VcpuExitReason::UnhandledTrap);
-            Resume::Halt
+            TrapOutcome::Exit(VcpuExitReason::UnhandledTrap)
         }
     }
 }

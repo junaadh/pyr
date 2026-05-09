@@ -1,6 +1,6 @@
 use crate::{
     hearth,
-    trap::{Resume, psci::Psci},
+    trap::{TrapOutcome, psci::Psci},
     vcpu::Vcpu,
     vm::Vm,
 };
@@ -11,7 +11,7 @@ pub fn handle_hvc64(
     _vcpu: &mut Vcpu,
     frame: &mut TrapFrame,
     imm16: u16,
-) -> Resume {
+) -> TrapOutcome {
     if Psci::is_psci_call(frame.x[0]) {
         return Psci::handle_call(frame);
     }

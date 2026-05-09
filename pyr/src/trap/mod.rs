@@ -1,12 +1,12 @@
 mod data_abort;
 mod dispatch;
 mod hvc;
+mod outcome;
 mod psci;
-mod resume;
 mod runner;
 
+pub use outcome::*;
 use pyr_arch::exception::TrapFrame;
-pub use resume::*;
 pub use runner::*;
 
 #[unsafe(no_mangle)]
