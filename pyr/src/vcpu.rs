@@ -1,4 +1,4 @@
-use pyr_arch::exception::TrapFrame;
+use pyr_arch::{exception::TrapFrame, platform::GuestReg};
 
 use crate::{guest::config::GuestConfig, vm::VmId};
 use core::fmt;
@@ -104,6 +104,29 @@ impl Vcpu {
 
     pub const fn advance_pc(&mut self, frame: &mut TrapFrame) {
         frame.elr_el2 = frame.elr_el2.wrapping_add(4);
+    }
+
+    pub fn read_gpr(&self, frame: &TrapFrame, reg: GuestReg) -> Option<u64> {
+        match reg {
+            GuestReg::Gpr(index) => frame.x.get(index as usize).copied(),
+            GuestReg::Zero => Some(0),
+        }
+    }
+
+    pub fn write_gpr(
+        &mut self,
+        frame: &mut TrapFrame,
+        reg: GuestReg,
+        value: u64,
+    ) -> Option<()> {
+        match reg {
+            GuestReg::Zero => Some(()),
+            GuestReg::Gpr(index) => {
+                let slot = frame.x.get_mut(index as usize)?;
+                *slot = value;
+                Some(())
+            }
+        }
     }
 }
 
