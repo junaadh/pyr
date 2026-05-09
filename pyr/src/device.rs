@@ -5,7 +5,10 @@ use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
     boot::info::{BootInfo, MachineKind, MemoryKind},
     exception::{DataAbortIss, TrapFrame},
-    platform::{MmioAccess, MmioAccessKind, MmioDevice, MmioError, MmioResult},
+    platform::{
+        MmioAccess, MmioAccessKind, MmioAccessRequest, MmioAccessRequestKind,
+        MmioDevice, MmioError, MmioResult,
+    },
 };
 use pyr_platform_qemu::{gic::Gic, pl011::Pl011};
 
@@ -75,7 +78,29 @@ impl DeviceMap {
 
         let region = self.find_region(raw).ok_or(MmioError::UnknownDevice)?;
 
-        let access = MmioAccess::from_abort(ipa, region.base(), frame, iss)?;
+        let request = MmioAccessRequest::decode_abort(ipa, region.base(), iss)?;
+
+        let access = match request.kind {
+            MmioAccessRequestKind::Read { target } => MmioAccess {
+                ipa: request.ipa,
+                offset: request.offset,
+                width: request.width,
+                kind: MmioAccessKind::Read { target },
+            },
+
+            MmioAccessRequestKind::Write { source } => {
+                let value = vcpu
+                    .read_gpr(frame, source)
+                    .ok_or(MmioError::InvalidSyndrome)?;
+
+                MmioAccess {
+                    ipa: request.ipa,
+                    offset: request.offset,
+                    width: request.width,
+                    kind: MmioAccessKind::Write { source, value },
+                }
+            }
+        };
 
         let result = match region.kind {
             DeviceKind::Pl011 => {

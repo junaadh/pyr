@@ -1,6 +1,6 @@
 use crate::{
     addr::{IpaAddr, PhysAddr},
-    exception::{DataAbortIss, TrapFrame},
+    exception::DataAbortIss,
 };
 
 pub trait Platform {
@@ -116,13 +116,28 @@ pub enum MmioResult {
     Read(u64),
 }
 
-impl MmioAccess {
-    pub fn from_abort(
+impl MmioAccess {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct MmioAccessRequest {
+    pub ipa: u64,
+    pub offset: u64,
+    pub width: MmioWidth,
+    pub kind: MmioAccessRequestKind,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MmioAccessRequestKind {
+    Read { target: GuestReg },
+    Write { source: GuestReg },
+}
+
+impl MmioAccessRequest {
+    pub fn decode_abort(
         ipa: IpaAddr,
         base: u64,
-        frame: &TrapFrame,
         iss: DataAbortIss,
-    ) -> Result<Self, MmioError> {
+    ) -> Result<MmioAccessRequest, MmioError> {
         if !iss.isv {
             return Err(MmioError::InvalidSyndrome);
         }
@@ -132,22 +147,9 @@ impl MmioAccess {
         let reg = GuestReg::from_srt(iss.srt)?;
 
         let kind = if iss.wnr {
-            let value = match reg {
-                GuestReg::Gpr(index) => frame
-                    .x
-                    .get(index as usize)
-                    .copied()
-                    .ok_or(MmioError::InvalidSyndrome)?,
-
-                GuestReg::Zero => 0,
-            };
-
-            MmioAccessKind::Write {
-                source: reg,
-                value: width.mask(value),
-            }
+            MmioAccessRequestKind::Write { source: reg }
         } else {
-            MmioAccessKind::Read { target: reg }
+            MmioAccessRequestKind::Read { target: reg }
         };
 
         Ok(Self {
