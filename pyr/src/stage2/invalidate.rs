@@ -1,5 +1,7 @@
 use pyr_arch::addr::IpaAddr;
 
+use crate::stage2::vmid::Vmid;
+
 pub struct Stage2Invalidation;
 
 impl Stage2Invalidation {
@@ -22,6 +24,12 @@ impl Stage2Invalidation {
     pub fn flush_ipa(_ipa: IpaAddr) {
         // FIXME: For now, using global stage-2 flush until
         // Pyr has VMID-aware targeted invalidation
+        Self::flush_all();
+    }
+
+    pub fn flush_vmid(_vmid: Vmid) {
+        // FIXME: For now, using global stage-2 flush until
+        // Pyr has TLBI encoding is added
         Self::flush_all();
     }
 }

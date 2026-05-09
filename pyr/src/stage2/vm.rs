@@ -158,7 +158,7 @@ impl Stage2Vm<Building> {
 
 impl Stage2Vm<Installed> {
     pub fn flush_all_translations(&self) {
-        Stage2Invalidation::flush_all();
+        Stage2Invalidation::flush_vmid(self.vmid);
     }
 
     pub fn enable(&self) {
