@@ -12,7 +12,6 @@ pub mod fatal;
 pub mod guest;
 pub mod hearth;
 pub mod mem;
-pub mod mmio;
 pub mod runtime;
 pub mod stage2;
 pub mod traits;

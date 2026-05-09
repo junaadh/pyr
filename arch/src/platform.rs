@@ -13,12 +13,6 @@ pub trait Platform {
     fn early_print(s: &str) {
         s.bytes().for_each(Self::early_putc);
     }
-
-    fn mmio_emulate(
-        ipa: IpaAddr,
-        frame: &mut TrapFrame,
-        iss: DataAbortIss,
-    ) -> Result<(), MmioError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

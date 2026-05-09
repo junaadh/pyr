@@ -1,58 +1,31 @@
+use crate::{trap::Resume, vcpu::Vcpu, vm::Vm};
 use pyr_arch::{
+    addr::IpaAddr,
     exception::{DataAbortIss, TrapFrame},
-    sysregs::el2::FarEl2,
+    sysregs::el2::{FarEl2, HpfarEl2},
 };
 
-use crate::{mmio, trap::Resume, vcpu::Vcpu, vm::Vm};
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum DataAbortKind {
-    AddressSizeFault,
-    TranslationFault,
-    AccessFlagFault,
-    PermissionFault,
-    AlignmentFault,
-    ExternalAbort,
-    Unknown(u8),
-}
-
-impl DataAbortKind {
-    pub const fn from_dfsc(dfsc: u8) -> Self {
-        match dfsc {
-            0x00..=0x03 => Self::AddressSizeFault,
-            0x04..=0x07 => Self::TranslationFault,
-            0x08..=0x0b => Self::AccessFlagFault,
-            0x0c..=0x0f => Self::PermissionFault,
-            0x10 => Self::ExternalAbort,
-            0x21 => Self::AlignmentFault,
-            other => Self::Unknown(other),
-        }
-    }
-
-    pub const fn is_stage2_mmio_candidate(self) -> bool {
-        matches!(
-            self,
-            Self::TranslationFault
-                | Self::AccessFlagFault
-                | Self::PermissionFault
-        )
-    }
-}
-
 pub fn handle(
-    _vm: &mut Vm,
-    _vcpu: &mut Vcpu,
+    vm: &mut Vm,
+    vcpu: &mut Vcpu,
     frame: &mut TrapFrame,
     iss: DataAbortIss,
 ) -> Resume {
-    let kind = DataAbortKind::from_dfsc(iss.dfsc);
     let far = FarEl2::mrs();
+    let hpfar = HpfarEl2::mrs();
+    let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
 
-    if !kind.is_stage2_mmio_candidate() {
-        crate::log!("guest data abort: {kind:?}");
-        crate::log!("FAR_EL2 = {:#018x}", far.raw());
-        return Resume::Halt;
+    match vm.devices().emulate_abort(IpaAddr::new(ipa), frame, iss) {
+        Ok(()) => Resume::AdvancePcAndReturn,
+
+        Err(err) => {
+            crate::log!(
+                "mmio: error {:?} {:?}: {err:?} @ {ipa:#018x}",
+                vm.id(),
+                vcpu.id()
+            );
+
+            Resume::Halt
+        }
     }
-
-    mmio::handle_data_abort(frame, iss)
 }

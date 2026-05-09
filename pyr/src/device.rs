@@ -135,6 +135,22 @@ impl DeviceRegion {
     pub const fn contains(&self, ipa: u64) -> bool {
         ipa >= self.base && ipa < self.base + self.len
     }
+
+    pub const fn base(&self) -> u64 {
+        self.base
+    }
+
+    pub const fn len(&self) -> u64 {
+        self.len
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub const fn kind(&self) -> DeviceKind {
+        self.kind
+    }
 }
 
 fn classify_mmio_region(
