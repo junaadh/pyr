@@ -42,6 +42,7 @@ pub struct Vcpu {
     config: GuestConfig,
     state: VcpuState,
     traps: u64,
+    exit_reason: VcpuExitReason,
 }
 
 impl Vcpu {
@@ -52,6 +53,7 @@ impl Vcpu {
             config,
             state: VcpuState::Created,
             traps: 0,
+            exit_reason: VcpuExitReason::None,
         }
     }
 
@@ -75,6 +77,15 @@ impl Vcpu {
         self.traps
     }
 
+    pub const fn exit_reason(&self) -> VcpuExitReason {
+        self.exit_reason
+    }
+
+    pub fn stop(&mut self, reason: VcpuExitReason) {
+        self.state = VcpuState::Halted;
+        self.exit_reason = reason;
+    }
+
     pub fn record_trap(&mut self) {
         self.traps = self.traps.wrapping_add(1);
     }
@@ -86,4 +97,13 @@ impl Vcpu {
     pub fn mark_halted(&mut self) {
         self.state = VcpuState::Halted;
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VcpuExitReason {
+    None,
+    Halted,
+    UnhandledTrap,
+    MmioError,
+    InternalError,
 }

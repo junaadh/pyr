@@ -1,4 +1,8 @@
-use crate::{trap::Resume, vcpu::Vcpu, vm::Vm};
+use crate::{
+    trap::Resume,
+    vcpu::{Vcpu, VcpuExitReason},
+    vm::Vm,
+};
 use pyr_arch::{
     addr::IpaAddr,
     exception::{DataAbortIss, TrapFrame},
@@ -25,6 +29,7 @@ pub fn handle(
                 vcpu.id()
             );
 
+            vcpu.stop(VcpuExitReason::MmioError);
             Resume::Halt
         }
     }

@@ -5,7 +5,7 @@ use pyr_arch::{
 
 use crate::{
     trap::{Resume, data_abort, hvc},
-    vcpu::Vcpu,
+    vcpu::{Vcpu, VcpuExitReason},
     vm::Vm,
 };
 
@@ -31,6 +31,7 @@ pub fn handle_trap(
                 vcpu.id()
             );
 
+            vcpu.stop(VcpuExitReason::UnhandledTrap);
             Resume::Halt
         }
     }
