@@ -97,7 +97,10 @@ impl DeviceMap {
                     ipa: request.ipa,
                     offset: request.offset,
                     width: request.width,
-                    kind: MmioAccessKind::Write { source, value },
+                    kind: MmioAccessKind::Write {
+                        source,
+                        value: request.width.mask(value),
+                    },
                 }
             }
         };
@@ -172,6 +175,10 @@ fn debug_assert_no_overlaps(regions: &[DeviceRegion]) {
                 "overlapping MMIO regions: {a:?} and {b:?}"
             );
         }
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        _ = regions;
     }
 }
 
