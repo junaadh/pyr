@@ -4,6 +4,7 @@ use pyr_alloc::{
 };
 
 use crate::{
+    device::PlatformDeviceConfig,
     fatal,
     guest::{
         launch::run_vcpu,
@@ -17,7 +18,11 @@ use crate::{
 };
 
 #[allow(dead_code)]
-pub fn boot_linux<A>(cx: &mut PyrContext<A>, config: LinuxBootConfig<'_>) -> !
+pub fn boot_linux<A>(
+    cx: &mut PyrContext<A>,
+    config: LinuxBootConfig<'_>,
+    devices: PlatformDeviceConfig,
+) -> !
 where
     A: PageAllocator + GuestRamAllocator,
 {
@@ -36,8 +41,10 @@ where
     let stage2 = stage2.install();
     let guest = boot.guest_config();
 
+    let device_map = devices.into_device_map();
+
     let vm_id = VmId::from_parts(stage2.root_pa().as_u64(), guest.entry);
-    let vm = Vm::new(vm_id, stage2);
+    let vm = Vm::new(vm_id, stage2, device_map);
     let vcpu = Vcpu::new(VcpuId::from_parts(vm_id, 0), vm_id, guest);
 
     log!(

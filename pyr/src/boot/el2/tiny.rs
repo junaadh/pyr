@@ -7,6 +7,7 @@ use pyr_alloc::{
 
 #[cfg(feature = "boot-tiny")]
 use crate::{
+    device::PlatformDeviceConfig,
     fatal,
     guest::{self, config::GuestConfig, launch::run_vcpu, memory::GuestMemory},
     log,
@@ -17,7 +18,7 @@ use crate::{
 };
 
 #[cfg(feature = "boot-tiny")]
-pub fn boot_tiny<A>(cx: &mut PyrContext<A>) -> !
+pub fn boot_tiny<A>(cx: &mut PyrContext<A>, devices: PlatformDeviceConfig) -> !
 where
     A: PageAllocator + GuestRamAllocator,
 {
@@ -58,8 +59,10 @@ where
         GuestMemory::stack_top_ipa(),
     );
 
+    let device_map = devices.into_device_map();
+
     let vm_id = VmId::from_parts(stage2.root_raw(), guest_config.entry);
-    let vm = Vm::new(vm_id, stage2);
+    let vm = Vm::new(vm_id, stage2, device_map);
     let vcpu = Vcpu::new(VcpuId::from_parts(vm_id, 0), vm_id, guest_config);
 
     log!(

@@ -1,7 +1,7 @@
 mod linux;
 mod tiny;
 
-use crate::{ActivePlatform, fatal, log, mem};
+use crate::{ActivePlatform, device::PlatformDeviceConfig, fatal, log, mem};
 use pyr_arch::{
     barrier::isb,
     boot::{abi::RawBootInfo, info::BootInfo},
@@ -87,6 +87,8 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
         cx.total_frames(),
     );
 
+    let devices = PlatformDeviceConfig::from_boot_info(&boot_info);
+
     #[cfg(feature = "boot-linux")]
     {
         use crate::boot::el2::linux::boot_linux;
@@ -97,12 +99,12 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
                 fatal!("could not build dev LinuxBootConfig: {err:?}")
             });
 
-        boot_linux(&mut cx, config)
+        boot_linux(&mut cx, config, devices)
     }
 
     #[cfg(feature = "boot-tiny")]
     {
-        tiny::boot_tiny(&mut cx)
+        tiny::boot_tiny(&mut cx, devices)
     }
 }
 
