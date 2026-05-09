@@ -41,6 +41,7 @@ pub struct Vcpu {
     vm_id: VmId,
     config: GuestConfig,
     state: VcpuState,
+    traps: u64,
 }
 
 impl Vcpu {
@@ -50,6 +51,7 @@ impl Vcpu {
             vm_id,
             config,
             state: VcpuState::Created,
+            traps: 0,
         }
     }
 
@@ -67,6 +69,14 @@ impl Vcpu {
 
     pub const fn state(&self) -> VcpuState {
         self.state
+    }
+
+    pub const fn trap_count(&self) -> u64 {
+        self.traps
+    }
+
+    pub fn record_trap(&mut self) {
+        self.traps = self.traps.wrapping_add(1);
     }
 
     pub fn mark_running(&mut self) {
