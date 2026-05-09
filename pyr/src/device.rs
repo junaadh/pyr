@@ -78,32 +78,7 @@ impl DeviceMap {
 
         let region = self.find_region(raw).ok_or(MmioError::UnknownDevice)?;
 
-        let request = MmioAccessRequest::decode_abort(ipa, region.base(), iss)?;
-
-        let access = match request.kind {
-            MmioAccessRequestKind::Read { target } => MmioAccess {
-                ipa: request.ipa,
-                offset: request.offset,
-                width: request.width,
-                kind: MmioAccessKind::Read { target },
-            },
-
-            MmioAccessRequestKind::Write { source } => {
-                let value = vcpu
-                    .read_gpr(frame, source)
-                    .ok_or(MmioError::InvalidSyndrome)?;
-
-                MmioAccess {
-                    ipa: request.ipa,
-                    offset: request.offset,
-                    width: request.width,
-                    kind: MmioAccessKind::Write {
-                        source,
-                        value: request.width.mask(value),
-                    },
-                }
-            }
-        };
+        let access = build_mmio_access(vcpu, frame, ipa, region.base, iss)?;
 
         let result = match region.kind {
             DeviceKind::Pl011 => {
@@ -258,6 +233,41 @@ fn complete_mmio(
 
         (MmioAccessKind::Write { .. }, MmioResult::Read(_)) => {
             Err(MmioError::InvalidSyndrome)
+        }
+    }
+}
+
+fn build_mmio_access(
+    vcpu: &mut Vcpu,
+    frame: &TrapFrame,
+    ipa: IpaAddr,
+    base: u64,
+    iss: DataAbortIss,
+) -> Result<MmioAccess, MmioError> {
+    let request = MmioAccessRequest::decode_abort(ipa, base, iss)?;
+
+    match request.kind {
+        MmioAccessRequestKind::Read { target } => Ok(MmioAccess {
+            ipa: request.ipa,
+            offset: request.offset,
+            width: request.width,
+            kind: MmioAccessKind::Read { target },
+        }),
+
+        MmioAccessRequestKind::Write { source } => {
+            let value = vcpu
+                .read_gpr(frame, source)
+                .ok_or(MmioError::InvalidSyndrome)?;
+
+            Ok(MmioAccess {
+                ipa: request.ipa,
+                offset: request.offset,
+                width: request.width,
+                kind: MmioAccessKind::Write {
+                    source,
+                    value: request.width.mask(value),
+                },
+            })
         }
     }
 }
