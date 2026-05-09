@@ -1,16 +1,22 @@
+use crate::{fatal, runtime::vm::VmRuntime, vcpu::Vcpu, vm::Vm};
 use core::ptr::NonNull;
 use pyr_arch::sysregs::el2::TpidrEl2;
 
-use crate::{fatal, vcpu::Vcpu, vm::Vm};
+pub mod vm;
 
 pub struct El2Context {
-    vm: Vm,
-    boot_vcpu: Vcpu,
+    runtime: VmRuntime,
 }
 
 impl El2Context {
-    pub const fn new(vm: Vm, boot_vcpu: Vcpu) -> Self {
-        Self { vm, boot_vcpu }
+    pub const fn from_vm(vm: Vm, boot_vcpu: Vcpu) -> Self {
+        Self {
+            runtime: VmRuntime::new(vm, boot_vcpu),
+        }
+    }
+
+    pub const fn new(runtime: VmRuntime) -> Self {
+        Self { runtime }
     }
 
     pub fn install_current(&mut self) {
@@ -42,15 +48,11 @@ impl El2Context {
         unsafe { ptr.as_ptr().as_mut().unwrap_unchecked() }
     }
 
-    pub fn split_mut(&mut self) -> (&mut Vm, &mut Vcpu) {
-        (&mut self.vm, &mut self.boot_vcpu)
+    pub const fn runtime(&self) -> &VmRuntime {
+        &self.runtime
     }
 
-    pub const fn vm(&self) -> &Vm {
-        &self.vm
-    }
-
-    pub const fn vpcu(&self) -> &Vcpu {
-        &self.boot_vcpu
+    pub const fn runtime_mut(&mut self) -> &mut VmRuntime {
+        &mut self.runtime
     }
 }

@@ -8,11 +8,11 @@ use pyr_arch::{
 };
 
 pub fn run_vcpu(cx: &mut El2Context) -> ! {
-    let config = cx.vpcu().config();
+    let config = cx.runtime().vcpu().config();
 
     cx.install_current();
 
-    let (_, vcpu) = cx.split_mut();
+    let (_, vcpu) = cx.runtime_mut().split_mut();
     vcpu.mark_running();
 
     crate::log!("el1: entering guest {:?}", vcpu.id());

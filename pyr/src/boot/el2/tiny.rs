@@ -71,7 +71,7 @@ where
         vm.stage2().root_raw()
     );
 
-    let mut cx = El2Context::new(vm, vcpu);
+    let mut cx = El2Context::from_vm(vm, vcpu);
 
     run_vcpu(&mut cx)
 }

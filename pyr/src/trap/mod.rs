@@ -15,7 +15,7 @@ pub use resume::*;
 #[unsafe(no_mangle)]
 pub extern "C" fn pyr_sync_lower_el64(frame: &mut TrapFrame) {
     let cx = El2Context::current();
-    let (vm, vcpu) = cx.split_mut();
+    let (vm, vcpu) = cx.runtime_mut().split_mut();
 
     vcpu.record_trap();
 
