@@ -1,4 +1,4 @@
-use crate::guest::config::GuestConfig;
+use crate::{guest::config::GuestConfig, vcpu::Vcpu, vm::Vm};
 use pyr_arch::{
     barrier::isb,
     sysregs::{
@@ -7,7 +7,12 @@ use pyr_arch::{
     },
 };
 
-pub fn enter_el1_guest(config: GuestConfig) -> ! {
+pub fn run_vcpu(_vm: &mut Vm, vcpu: &mut Vcpu) -> ! {
+    vcpu.mark_running();
+    enter_el1_guest(vcpu.config())
+}
+
+fn enter_el1_guest(config: GuestConfig) -> ! {
     crate::log!(
         "el1: entry={:#018x} sp={:#018x} x0={:#x}",
         config.entry,

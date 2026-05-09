@@ -14,6 +14,8 @@ pub mod mem;
 pub mod mmio;
 pub mod stage2;
 pub mod trap;
+pub mod vcpu;
+pub mod vm;
 
 #[cfg(feature = "platform-qemu-virt")]
 use pyr_platform_qemu::QemuVirt;

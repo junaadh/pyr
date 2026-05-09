@@ -6,11 +6,13 @@ use pyr_alloc::{
 use crate::{
     fatal,
     guest::{
-        launch::enter_el1_guest,
+        launch::run_vcpu,
         linux::{boot::load_linux_boot, boot_config::LinuxBootConfig},
     },
     log,
     stage2::Stage2Vm,
+    vcpu::{Vcpu, VcpuId},
+    vm::{Vm, VmId},
 };
 
 #[allow(dead_code)]
@@ -32,7 +34,10 @@ where
 
     log!("stage2: root={:#018x}", stage2.root_raw());
 
-    let _stage2 = stage2.install();
+    let stage2 = stage2.install();
 
-    enter_el1_guest(boot.guest_config())
+    let mut vm = Vm::new(VmId(0), stage2);
+    let mut vcpu = Vcpu::new(VcpuId(0), vm.id(), boot.guest_config());
+
+    run_vcpu(&mut vm, &mut vcpu)
 }

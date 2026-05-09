@@ -8,9 +8,11 @@ use pyr_alloc::{
 #[cfg(feature = "boot-tiny")]
 use crate::{
     fatal,
-    guest::{self, memory::GuestMemory},
+    guest::{self, config::GuestConfig, launch::run_vcpu, memory::GuestMemory},
     log,
     stage2::Stage2Vm,
+    vcpu::{Vcpu, VcpuId},
+    vm::{Vm, VmId},
 };
 
 #[cfg(feature = "boot-tiny")]
@@ -50,7 +52,15 @@ where
 
     log!("stage2: root={:#018x}", stage2.root_raw());
 
-    stage2.install();
+    let stage2 = stage2.install();
 
-    guest::tiny::enter_tiny_guest()
+    let guest_config = GuestConfig::new(
+        GuestMemory::KERNEL_LOAD_IPA.as_u64(),
+        GuestMemory::stack_top_ipa(),
+    );
+
+    let mut vm = Vm::new(VmId(0), stage2);
+    let mut vcpu = Vcpu::new(VcpuId(0), vm.id(), guest_config);
+
+    run_vcpu(&mut vm, &mut vcpu);
 }
