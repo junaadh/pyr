@@ -1,4 +1,4 @@
-use crate::{guest::config::GuestConfig, runtime::El2Context};
+use crate::guest::config::GuestConfig;
 use pyr_arch::{
     barrier::isb,
     sysregs::{
@@ -7,20 +7,7 @@ use pyr_arch::{
     },
 };
 
-pub fn run_vcpu(cx: &mut El2Context) -> ! {
-    let config = cx.runtime().vcpu().config();
-
-    cx.install_current();
-
-    let (_, vcpu) = cx.runtime_mut().split_mut();
-    vcpu.mark_running();
-
-    crate::log!("el1: entering guest {:?}", vcpu.id());
-
-    enter_el1_guest(config)
-}
-
-fn enter_el1_guest(config: GuestConfig) -> ! {
+pub(crate) fn enter_el1_guest(config: GuestConfig) -> ! {
     crate::log!(
         "el1: entry={:#018x} sp={:#018x} x0={:#x}",
         config.entry,

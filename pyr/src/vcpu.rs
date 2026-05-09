@@ -1,6 +1,8 @@
 use crate::{guest::config::GuestConfig, vm::VmId};
 use core::fmt;
 
+pub mod runner;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct VcpuId {
     vm: VmId,

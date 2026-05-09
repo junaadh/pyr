@@ -9,11 +9,11 @@ use pyr_alloc::{
 use crate::{
     device::PlatformDeviceConfig,
     fatal,
-    guest::{self, config::GuestConfig, launch::run_vcpu, memory::GuestMemory},
+    guest::{self, config::GuestConfig, memory::GuestMemory},
     log,
     runtime::El2Context,
     stage2::Stage2Vm,
-    vcpu::{Vcpu, VcpuId},
+    vcpu::{Vcpu, VcpuId, runner::VcpuRunner},
     vm::{Vm, VmId},
 };
 
@@ -73,5 +73,5 @@ where
 
     let mut cx = El2Context::from_vm(vm, vcpu);
 
-    run_vcpu(&mut cx)
+    VcpuRunner::run(&mut cx)
 }
