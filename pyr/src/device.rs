@@ -93,7 +93,15 @@ impl DeviceMap {
             .find(|region| region.contains(raw))
             .ok_or(MmioError::UnknownDevice)?;
 
-        let access = MmioAccess::from_abort(ipa, region.base, frame, iss)?;
+        let access_base = match region.kind {
+            DeviceKind::Pl011 => Pl011::BASE,
+            DeviceKind::Gic => {
+                Gic::base_for(raw).ok_or(MmioError::UnknownDevice)?
+            }
+            DeviceKind::UnknownMmio => return Err(MmioError::UnknownDevice),
+        };
+
+        let access = MmioAccess::from_abort(ipa, access_base, frame, iss)?;
 
         let result = match region.kind {
             DeviceKind::Pl011 => {
