@@ -111,7 +111,25 @@ impl DeviceMap {
                 )
             });
 
+        regions.sort_by_key(|region| region.base());
+
+        debug_assert_no_overlaps(&regions);
+
         Self { regions }
+    }
+}
+
+fn debug_assert_no_overlaps(regions: &[DeviceRegion]) {
+    #[cfg(debug_assertions)]
+    for window in regions.windows(2) {
+        if let Some(a) = window.first()
+            && let Some(b) = window.get(1)
+        {
+            debug_assert!(
+                a.end() <= b.base(),
+                "overlapping MMIO regions: {a:?} and {b:?}"
+            );
+        }
     }
 }
 
@@ -134,6 +152,10 @@ impl DeviceRegion {
 
     pub const fn kind(&self) -> DeviceKind {
         self.kind
+    }
+
+    pub const fn end(&self) -> u64 {
+        self.base + self.len
     }
 }
 
