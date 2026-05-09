@@ -18,7 +18,7 @@ impl TrapRunner {
         match dispatch::handle_trap(vm, vcpu, frame) {
             TrapOutcome::Return => {}
             TrapOutcome::AdvancePc => {
-                frame.elr_el2 = frame.elr_el2.wrapping_add(4);
+                vcpu.advance_pc(frame);
             }
             TrapOutcome::Exit(reason) => {
                 vcpu.stop(reason);

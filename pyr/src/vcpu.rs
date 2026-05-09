@@ -1,3 +1,5 @@
+use pyr_arch::exception::TrapFrame;
+
 use crate::{guest::config::GuestConfig, vm::VmId};
 use core::fmt;
 
@@ -98,6 +100,10 @@ impl Vcpu {
 
     pub fn mark_halted(&mut self) {
         self.state = VcpuState::Halted;
+    }
+
+    pub const fn advance_pc(&mut self, frame: &mut TrapFrame) {
+        frame.elr_el2 = frame.elr_el2.wrapping_add(4);
     }
 }
 
