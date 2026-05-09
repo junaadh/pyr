@@ -1,3 +1,5 @@
+use core::cmp::Ordering;
+
 use alloc::vec::Vec;
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
@@ -67,11 +69,7 @@ impl DeviceMap {
     ) -> Result<(), MmioError> {
         let raw = ipa.as_u64();
 
-        let region = self
-            .regions
-            .iter()
-            .find(|region| region.contains(raw))
-            .ok_or(MmioError::UnknownDevice)?;
+        let region = self.find_region(raw).ok_or(MmioError::UnknownDevice)?;
 
         let access = MmioAccess::from_abort(ipa, region.base(), frame, iss)?;
 
@@ -116,6 +114,21 @@ impl DeviceMap {
         debug_assert_no_overlaps(&regions);
 
         Self { regions }
+    }
+
+    fn find_region(&self, ipa: u64) -> Option<&DeviceRegion> {
+        self.regions
+            .binary_search_by(|region| {
+                if ipa < region.base() {
+                    Ordering::Greater
+                } else if ipa >= region.end() {
+                    Ordering::Less
+                } else {
+                    Ordering::Equal
+                }
+            })
+            .ok()
+            .and_then(|idx| self.regions.get(idx))
     }
 }
 
