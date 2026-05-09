@@ -25,18 +25,12 @@ where
     let boot = load_linux_boot(cx, image, dtb, initrd)
         .unwrap_or_else(|err| fatal!("linux boot load failed: {err:?}"));
 
-    log!("linux dtb IPA     = {:#018x}", boot.dtb.ipa().as_u64());
-    log!("linux x0          = {:#018x}", boot.guest_config().x0);
-    log!("linux x1          = {:#018x}", boot.guest_config().x1);
-    log!("linux x2          = {:#018x}", boot.guest_config().x2);
-    log!("linux x3          = {:#018x}", boot.guest_config().x3);
-
     let mut stage2 = Stage2Vm::new(cx)
         .unwrap_or_else(|err| fatal!("tage2 init failed: {err:?}"));
     boot.map_into(cx, &mut stage2)
         .unwrap_or_else(|err| fatal!("linux stage2 map failed: {err:?}"));
 
-    log!("stage2 root = {:#018x}", stage2.root_raw());
+    log!("stage2: root={:#018x}", stage2.root_raw());
 
     let _stage2 = stage2.install();
 

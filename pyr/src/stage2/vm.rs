@@ -65,12 +65,18 @@ impl Stage2Vm<Building> {
             .alloc_zeroed_frame()
             .map_err(|_| MapError::OutOfPageTables)?;
 
+        // SAFETY:
+        // `root` is a freshly allocated zeroed 4 KiB frame from the frame allocator.
+        // `PhysFrame` guarantees the pointer is non-null, page-aligned, writable,
+        // and uniquely owned by this Stage2Vm.
         let root_ptr = unsafe {
             NonNull::new_unchecked(root.as_ptr().as_ptr() as *mut PageTable)
         };
 
+        // SAFETY:
+        // `root_ptr` points to a valid zeroed PageTable frame. This Stage2Vm owns
+        // `root`, so the backing memory stays alive for the lifetime of `tables`.
         let tables = unsafe { Stage2Tables::new(root_ptr) };
-
         Ok(Self {
             root,
             child_tables: Vec::new(),

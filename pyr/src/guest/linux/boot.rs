@@ -81,26 +81,36 @@ where
         )
         .map_err(|err| {
             crate::log!("Failed to allocate RAM for linux: {err:?}");
-            LinuxBootLoadError::Image(LinuxLoadError::GuestMemory(
+            LinuxBootLoadError::Image(LinuxLoadError::Memory(
                 GuestMemoryError::OutOfBounds,
             ))
         })?;
 
     log!(
-        "Allocated ram for linux: size={} base={:#x}",
+        "mem: guest_ram base={:#x} size={}",
+        ram.base().as_u64(),
         ram.size(),
-        ram.base().as_u64()
     );
 
     let linux = load_linux_image(image.data(), &ram)
         .map_err(LinuxBootLoadError::Image)?;
 
-    log!("Loaded linux image to ram");
+    log!(
+        "linux: image ipa={:#x} pa={:#x} size={}",
+        linux.image.ipa().as_u64(),
+        linux.image.pa().as_u64(),
+        linux.image.size()
+    );
 
     let loaded_dtb =
         load_dtb_blob(dtb.data(), &ram).map_err(LinuxBootLoadError::Dtb)?;
 
-    log!("Loaded dtb to ram");
+    log!(
+        "linux: dtb ipa={:#x} pa={:#x} size={}",
+        loaded_dtb.region().ipa().as_u64(),
+        loaded_dtb.region().pa().as_u64(),
+        loaded_dtb.region().size()
+    );
 
     let loaded_initrd = match &initrd {
         Some(slice) => {
@@ -109,7 +119,14 @@ where
                     .map_err(LinuxBootLoadError::Initrd)?
                     .region(),
             );
-            log!("Loaded initrd to ram");
+            if let Some(initrd_gr) = tmp {
+                log!(
+                    "linux: initrd ipa={:#x} pa={:#x} size={}",
+                    initrd_gr.ipa().as_u64(),
+                    initrd_gr.pa().as_u64(),
+                    initrd_gr.size()
+                );
+            }
             tmp
         }
         None => None,

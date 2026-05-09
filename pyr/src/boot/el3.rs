@@ -6,7 +6,7 @@ use pyr_arch::{
 use crate::log;
 
 pub fn transition_to_el2_with_arg(el2_entry: u64, arg0: u64) -> ! {
-    log!("transitioning EL3 -> EL2");
+    log!("el3: transitioning to EL2={:#x}", el2_entry);
 
     ScrEl3::new().with_ns().with_rw().with_hce().msr();
 

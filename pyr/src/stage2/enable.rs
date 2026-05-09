@@ -7,10 +7,6 @@ use pyr_arch::{
 pub fn enable_stage2(root_pa: u64) {
     configure_translation(root_pa);
     enable_hcr_vm();
-
-    crate::log!("VTCR_EL2 after = {:#018x}", VtcrEl2::mrs().raw());
-    crate::log!("VTTBR_EL2 after = {:#018x}", VttbrEl2::mrs().raw());
-    crate::log!("HCR_EL2 stage2 = {:#018x}", HcrEl2::mrs().raw());
 }
 
 fn configure_translation(root_pa: u64) {

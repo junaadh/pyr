@@ -7,10 +7,7 @@ use pyr_arch::{
     boot::{abi::RawBootInfo, info::BootInfo},
     exception::install_el2_vectors,
     platform::Platform,
-    sysregs::{
-        common::CurrentEl,
-        el2::{HcrEl2, SctlrEl2, VbarEl2, VtcrEl2, VttbrEl2},
-    },
+    sysregs::el2::HcrEl2,
 };
 
 #[cfg(all(feature = "boot-tiny", feature = "boot-linux"))]
@@ -72,9 +69,9 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
     }
 
     log!(
-        "heap initialized: start={:#x} len={:#x}",
+        "mem: heap={:#x}..{:#x}",
         heap.start.as_u64(),
-        heap.len
+        heap.end.as_u64()
     );
 
     // SAFETY:
@@ -85,7 +82,7 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
     let mut cx = unsafe { mem::init_allocator(&boot_info) };
 
     log!(
-        "frame allocator: {}/{} frames free",
+        "mem: frame free={} total={}",
         cx.free_frames(),
         cx.total_frames(),
     );
@@ -111,25 +108,15 @@ fn pyr_el2_entry(boot_info: BootInfo<'_>) -> ! {
 
 fn init_el2(boot_info: &BootInfo<'_>) {
     <ActivePlatform as Platform>::early_init();
-    log!("booting");
-    log!("boot source = {:?}", boot_info.boot_source());
-    log!("machine     = {:?}", boot_info.machine());
-    log!("entry EL    = {:?}", boot_info.entry_el());
+    log!("booting Pyr Hypervisor...");
+    log!(
+        "boot: source={:?} machine={:?} entry_el={:?}",
+        boot_info.boot_source(),
+        boot_info.machine(),
+        boot_info.entry_el()
+    );
 
     install_el2_vectors();
-
-    log!("VBAR_EL2 = {:#018x}", VbarEl2::mrs().raw());
-
-    let el = CurrentEl::mrs();
-    log!("CurrentEL = {:#018x}", el.raw());
-    log!("Exception level = EL{}", el.exception_level());
-
-    let hcr = HcrEl2::mrs();
-    let sctlr = SctlrEl2::mrs();
-
-    log!("HCR_EL2 = {:#018x}", hcr.raw());
-    log!("SCTLR_EL2 = {:#018x}", sctlr.raw());
-    log!("SCTLR_EL2.M = {}", sctlr.mmu_enabled());
 
     HcrEl2::mrs()
         .without_tge()
@@ -140,9 +127,4 @@ fn init_el2(boot_info: &BootInfo<'_>) {
         .with_fmo()
         .msr();
     isb();
-
-    log!("HCR_EL2 after RW = {:#018x}", HcrEl2::mrs().raw());
-
-    log!("VTCR_EL2 = {:#018x}", VtcrEl2::mrs().raw());
-    log!("VTTBR_EL2 = {:#018x}", VttbrEl2::mrs().raw());
 }

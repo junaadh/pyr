@@ -8,8 +8,12 @@ use pyr_arch::{
 };
 
 pub fn enter_el1_guest(config: GuestConfig) -> ! {
-    crate::log!("entering EL1 guest at {:#018x}", config.entry);
-    crate::log!("SP_EL1 = {:#018x}", config.stack_top);
+    crate::log!(
+        "el1: entry={:#018x} sp={:#018x} x0={:#x}",
+        config.entry,
+        config.stack_top,
+        config.x0
+    );
 
     MairEl1::minimal().msr();
     TcrEl1::disabled_mmu_minimal().msr();
@@ -19,8 +23,6 @@ pub fn enter_el1_guest(config: GuestConfig) -> ! {
 
     ElrEl2::new(config.entry).msr();
     SpEl1::new(config.stack_top).msr();
-
-    crate::log!("ELR_EL2 = {:#018x}", ElrEl2::mrs().raw());
 
     #[cfg(feature = "boot-tiny")]
     {
@@ -34,15 +36,8 @@ pub fn enter_el1_guest(config: GuestConfig) -> ! {
 
     isb();
 
-    crate::log!("SPSR_EL2 = {:#018x}", SpsrEl2::mrs().raw());
-    crate::log!("SCTLR_EL1 = {:#018x}", SctlrEl1::mrs().raw());
-
     CntvoffEl2::new(0).msr();
-
     CnthctlEl2::mrs().with_el1pcten().with_el1pcen().msr();
-
-    crate::log!("CNTHCTL_EL2 = {:#018x}", CnthctlEl2::mrs().raw());
-    crate::log!("CNTVOFF_EL2 = {:#018x}", CntvoffEl2::mrs().raw());
 
     // SAFETY: ELR_EL2 points to guest entry, SP_EL1 is initialized, and SPSR_EL2 selects EL1h
     unsafe { eret_with_args(config) }

@@ -152,7 +152,7 @@ impl<'a> BootInfo<'a> {
     }
 
     pub fn guest_ram_arena(&self) -> Option<MemoryRegion> {
-        self.memory.first_of(MemoryKind::PyrReserved)
+        self.memory.first_of(MemoryKind::GuestRamArena)
     }
 }
 
@@ -405,7 +405,7 @@ pub enum MemoryKind {
     HypervisorStack,
     HypervisorHeap,
     FramePool,
-    PyrReserved,
+    GuestRamArena,
     BootResource,
     BootResourceReserved,
     Mmio,
@@ -614,7 +614,7 @@ impl From<RawMemoryKind> for MemoryKind {
             RawMemoryKind::HypervisorStack => Self::HypervisorStack,
             RawMemoryKind::HypervisorHeap => Self::HypervisorHeap,
             RawMemoryKind::FramePool => Self::FramePool,
-            RawMemoryKind::PyrReserved => Self::PyrReserved,
+            RawMemoryKind::GuestRamArena => Self::GuestRamArena,
             RawMemoryKind::BootResource => Self::BootResource,
             RawMemoryKind::BootResourceReserved => Self::BootResourceReserved,
             RawMemoryKind::Mmio => Self::Mmio,

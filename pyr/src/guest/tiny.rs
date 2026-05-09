@@ -23,15 +23,9 @@ pub fn load_tiny_guest(ram: &GuestRam) -> GuestRegion {
     // SAFETY: *const src and len are calulated from __tiny_guest_* extern symbols
     let slice = unsafe { core::slice::from_raw_parts(src, len) };
 
-    let region = GuestMemory::load_image(ram, slice).unwrap_or_else(|err| {
+    GuestMemory::load_image(ram, slice).unwrap_or_else(|err| {
         crate::fatal!("tiny guest too large: {len} bytes: {err:?}")
-    });
-
-    crate::log!("tiny guest loaded: {} bytes", len);
-    crate::log!("tiny guest IPA = {:#018x}", region.ipa().as_u64());
-    crate::log!("tiny guest PA  = {:#018x}", region.pa().as_u64());
-
-    region
+    })
 }
 
 pub fn enter_tiny_guest() -> ! {

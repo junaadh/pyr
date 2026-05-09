@@ -104,7 +104,7 @@ pub enum RawMemoryKind {
     HypervisorHeap = 6,
     FramePool = 7,
 
-    PyrReserved = 8,
+    GuestRamArena = 8,
     BootResource = 9,
     BootResourceReserved = 10,
 

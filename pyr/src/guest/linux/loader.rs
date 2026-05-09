@@ -9,7 +9,6 @@ use pyr_alloc::guest_ram::GuestRam;
 pub enum LinuxLoadError {
     Image(LinuxImageError),
     Memory(GuestMemoryError),
-    GuestMemory(GuestMemoryError),
 }
 
 pub struct LoadedLinux {
