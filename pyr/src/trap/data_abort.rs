@@ -5,7 +5,7 @@ use crate::{
 };
 use pyr_arch::{
     addr::IpaAddr,
-    exception::{DataAbortIss, TrapFrame},
+    exception::DataAbortIss,
     sysregs::el2::{FarEl2, HpfarEl2},
 };
 
@@ -43,12 +43,7 @@ impl DataAbortKind {
     }
 }
 
-pub fn handle(
-    vm: &mut Vm,
-    vcpu: &mut Vcpu,
-    frame: &mut TrapFrame,
-    iss: DataAbortIss,
-) -> TrapOutcome {
+pub fn handle(vm: &mut Vm, vcpu: &mut Vcpu, iss: DataAbortIss) -> TrapOutcome {
     let kind = DataAbortKind::from_dfsc(iss.dfsc);
     let far = FarEl2::mrs();
 
@@ -66,10 +61,7 @@ pub fn handle(
     let hpfar = HpfarEl2::mrs();
     let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
 
-    match vm
-        .devices()
-        .emulate_abort(vcpu, IpaAddr::new(ipa), frame, iss)
-    {
+    match vm.devices().emulate_abort(vcpu, IpaAddr::new(ipa), iss) {
         Ok(()) => TrapOutcome::AdvancePc,
 
         Err(err) => {

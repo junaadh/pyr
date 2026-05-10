@@ -1,5 +1,5 @@
-use crate::trap::TrapOutcome;
-use pyr_arch::exception::TrapFrame;
+use crate::{trap::TrapOutcome, vcpu::Vcpu};
+use pyr_arch::reg::Gpr;
 
 pub struct Psci;
 
@@ -28,25 +28,26 @@ impl Psci {
         )
     }
 
-    pub fn handle_call(frame: &mut TrapFrame) -> TrapOutcome {
-        match frame.x[0] {
+    pub fn handle_call(vcpu: &mut Vcpu) -> TrapOutcome {
+        match vcpu.context().x(Gpr::X0) {
             Self::PSCI_VERSION => {
-                frame.x[0] = 0x0001_0000; // PSCI 1.0
+                vcpu.context_mut().write_x(Gpr::X0, 0x0001_0000); // PSCI 1.0
                 TrapOutcome::Return
             }
 
             Self::PSCI_MIGRATE_INFO_TYPE => {
-                frame.x[0] = 2; // Trusted OS migration not required
+                vcpu.context_mut().write_x(Gpr::X0, 2); // Trusted OS migration not required
                 TrapOutcome::Return
             }
 
             Self::PSCI_AFFINITY_INFO => {
-                frame.x[0] = 0; // CPU is on
+                vcpu.context_mut().write_x(Gpr::X0, 0); // CPU is on
                 TrapOutcome::Return
             }
 
             Self::PSCI_CPU_ON => {
-                frame.x[0] = Self::PSCI_NOT_SUPPORTED;
+                vcpu.context_mut()
+                    .write_x(Gpr::X0, Self::PSCI_NOT_SUPPORTED);
                 TrapOutcome::Return
             }
 
@@ -56,7 +57,7 @@ impl Psci {
             }
 
             Self::PSCI_FEATURES => {
-                Self::handle_psci_features(frame);
+                Self::handle_psci_features(vcpu);
                 TrapOutcome::Return
             }
 
@@ -66,17 +67,20 @@ impl Psci {
         }
     }
 
-    const fn handle_psci_features(frame: &mut TrapFrame) {
-        let queried = frame.x[1];
+    fn handle_psci_features(vcpu: &mut Vcpu) {
+        let queried = vcpu.context().x(Gpr::X1);
 
-        frame.x[0] = match queried {
-            Self::PSCI_VERSION
-            | Self::PSCI_MIGRATE_INFO_TYPE
-            | Self::PSCI_AFFINITY_INFO
-            | Self::PSCI_SYSTEM_OFF
-            | Self::PSCI_SYSTEM_RESET => Self::PSCI_SUCCESS,
-            Self::PSCI_CPU_ON => Self::PSCI_NOT_SUPPORTED,
-            _ => Self::PSCI_NOT_SUPPORTED,
-        };
+        vcpu.context_mut().write_x(
+            Gpr::X0,
+            match queried {
+                Self::PSCI_VERSION
+                | Self::PSCI_MIGRATE_INFO_TYPE
+                | Self::PSCI_AFFINITY_INFO
+                | Self::PSCI_SYSTEM_OFF
+                | Self::PSCI_SYSTEM_RESET => Self::PSCI_SUCCESS,
+                Self::PSCI_CPU_ON => Self::PSCI_NOT_SUPPORTED,
+                _ => Self::PSCI_NOT_SUPPORTED,
+            },
+        );
     }
 }

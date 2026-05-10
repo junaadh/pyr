@@ -1,4 +1,5 @@
-use pyr_arch::exception::TrapFrame;
+use crate::vcpu::Vcpu;
+use pyr_arch::reg::Gpr;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 
@@ -48,7 +49,7 @@ pub struct HvcCall {
 }
 
 impl HvcCall {
-    pub const fn new(
+    pub fn new(
         imm16: u16,
 
         extension: ExtensionId,
@@ -76,14 +77,14 @@ impl HvcCall {
         }
     }
 
-    pub const fn from_frame(frame: &TrapFrame, imm16: u16) -> Self {
+    pub fn from_vcpu(vcpu: &Vcpu, imm16: u16) -> Self {
         Self::new(
             imm16,
-            ExtensionId::from_raw(frame.x[0]),
-            FunctionId::from_raw(frame.x[1]),
-            frame.x[2],
-            frame.x[3],
-            frame.x[4],
+            ExtensionId::from_raw(vcpu.context().x(Gpr::X0)),
+            FunctionId::from_raw(vcpu.context().x(Gpr::X1)),
+            vcpu.context().x(Gpr::X2),
+            vcpu.context().x(Gpr::X3),
+            vcpu.context().x(Gpr::X4),
         )
     }
 }

@@ -1,8 +1,7 @@
 use crate::{
-    guest::config::GuestConfig,
+    guest::{config::GuestConfig, context::GuestContext},
     id::{VcpuId, VmId},
 };
-use pyr_arch::{exception::TrapFrame, platform::GuestReg};
 
 pub mod runner;
 
@@ -41,16 +40,18 @@ pub struct Vcpu {
     id: VcpuId,
     vm_id: VmId,
     config: GuestConfig,
+    context: GuestContext,
     state: VcpuState,
     traps: u64,
 }
 
 impl Vcpu {
-    pub const fn new(id: VcpuId, vm_id: VmId, config: GuestConfig) -> Self {
+    pub fn new(id: VcpuId, vm_id: VmId, config: GuestConfig) -> Self {
         Self {
             id,
             vm_id,
             config,
+            context: GuestContext::from_config(config),
             state: VcpuState::Created,
             traps: 0,
         }
@@ -66,6 +67,14 @@ impl Vcpu {
 
     pub const fn config(&self) -> GuestConfig {
         self.config
+    }
+
+    pub const fn context(&self) -> &GuestContext {
+        &self.context
+    }
+
+    pub const fn context_mut(&mut self) -> &mut GuestContext {
+        &mut self.context
     }
 
     pub const fn state(&self) -> VcpuState {
@@ -115,33 +124,6 @@ impl Vcpu {
 
     pub fn record_trap(&mut self) {
         self.traps = self.traps.wrapping_add(1);
-    }
-
-    pub const fn advance_pc(&mut self, frame: &mut TrapFrame) {
-        frame.elr_el2 = frame.elr_el2.wrapping_add(4);
-    }
-
-    pub fn read_gpr(&self, frame: &TrapFrame, reg: GuestReg) -> Option<u64> {
-        match reg {
-            GuestReg::Gpr(index) => frame.x.get(index as usize).copied(),
-            GuestReg::Zero => Some(0),
-        }
-    }
-
-    pub fn write_gpr(
-        &mut self,
-        frame: &mut TrapFrame,
-        reg: GuestReg,
-        value: u64,
-    ) -> Option<()> {
-        match reg {
-            GuestReg::Zero => Some(()),
-            GuestReg::Gpr(index) => {
-                let slot = frame.x.get_mut(index as usize)?;
-                *slot = value;
-                Some(())
-            }
-        }
     }
 }
 

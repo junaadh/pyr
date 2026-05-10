@@ -13,12 +13,14 @@ impl TrapRunner {
         let cx = El2Context::current();
         let (vm, vcpu) = cx.runtime_mut().split_mut();
 
+        vcpu.context_mut().sync_from_trap_frame(frame);
         vcpu.record_trap();
 
-        match dispatch::handle_trap(vm, vcpu, frame) {
-            TrapOutcome::Return => {}
+        match dispatch::handle_trap(vm, vcpu) {
+            TrapOutcome::Return => vcpu.context().sync_to_trap_frame(frame),
             TrapOutcome::AdvancePc => {
-                vcpu.advance_pc(frame);
+                vcpu.context_mut().advance_pc();
+                vcpu.context().sync_to_trap_frame(frame);
             }
             TrapOutcome::Exit(reason) => {
                 vcpu.halt(reason);

@@ -1,6 +1,7 @@
 use crate::{
     addr::{IpaAddr, PhysAddr},
     exception::DataAbortIss,
+    reg::Gpr,
 };
 
 pub trait Platform {
@@ -65,14 +66,14 @@ pub enum MmioAccessKind {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum GuestReg {
-    Gpr(u8),
+    Gpr(Gpr),
     Zero,
 }
 
 impl GuestReg {
-    pub const fn from_srt(srt: u8) -> Result<Self, MmioError> {
-        if srt < 31 {
-            Ok(Self::Gpr(srt))
+    pub fn from_srt(srt: u8) -> Result<Self, MmioError> {
+        if let Some(reg) = Gpr::from_u8(srt) {
+            Ok(Self::Gpr(reg))
         } else if srt == 31 {
             Ok(Self::Zero)
         } else {

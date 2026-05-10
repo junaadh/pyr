@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use pyr_arch::{
     addr::{IpaAddr, PhysAddr},
     boot::info::{BootInfo, MachineKind, MemoryKind},
-    exception::{DataAbortIss, TrapFrame},
+    exception::DataAbortIss,
     platform::{
         MmioAccess, MmioAccessKind, MmioAccessRequest, MmioAccessRequestKind,
         MmioDevice, MmioError, MmioResult,
@@ -71,14 +71,13 @@ impl DeviceMap {
         &self,
         vcpu: &mut Vcpu,
         ipa: IpaAddr,
-        frame: &mut TrapFrame,
         iss: DataAbortIss,
     ) -> Result<(), MmioError> {
         let raw = ipa.as_u64();
 
         let region = self.find_region(raw).ok_or(MmioError::UnknownDevice)?;
 
-        let access = build_mmio_access(vcpu, frame, ipa, region.base, iss)?;
+        let access = build_mmio_access(vcpu, ipa, region.base, iss)?;
 
         let result = match region.kind {
             DeviceKind::Pl011 => {
@@ -94,7 +93,7 @@ impl DeviceMap {
             }
         };
 
-        complete_mmio(vcpu, frame, access, result)
+        complete_mmio(vcpu, access, result)
     }
 
     pub fn from_platform_config(config: PlatformDeviceConfig) -> Self {
@@ -217,7 +216,6 @@ fn push_qemu_virt_devices(
 
 fn complete_mmio(
     vcpu: &mut Vcpu,
-    frame: &mut TrapFrame,
     access: MmioAccess,
     result: MmioResult,
 ) -> Result<(), MmioError> {
@@ -227,8 +225,9 @@ fn complete_mmio(
         (MmioAccessKind::Read { target }, MmioResult::Read(value)) => {
             let value = access.width.mask(value);
 
-            vcpu.write_gpr(frame, target, value)
-                .ok_or(MmioError::InvalidSyndrome)
+            vcpu.context_mut()
+                .write_reg(target, value)
+                .map_err(|_| MmioError::InvalidSyndrome)
         }
 
         (MmioAccessKind::Write { .. }, MmioResult::Read(_)) => {
@@ -239,7 +238,6 @@ fn complete_mmio(
 
 fn build_mmio_access(
     vcpu: &mut Vcpu,
-    frame: &TrapFrame,
     ipa: IpaAddr,
     base: u64,
     iss: DataAbortIss,
@@ -256,8 +254,9 @@ fn build_mmio_access(
 
         MmioAccessRequestKind::Write { source } => {
             let value = vcpu
-                .read_gpr(frame, source)
-                .ok_or(MmioError::InvalidSyndrome)?;
+                .context()
+                .read_reg(source)
+                .map_err(|_| MmioError::InvalidSyndrome)?;
 
             Ok(MmioAccess {
                 ipa: request.ipa,
