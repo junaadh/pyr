@@ -5,11 +5,12 @@ use crate::{
     device::PlatformDeviceConfig,
     fatal,
     guest::linux::{boot::load_linux_boot, boot_config::LinuxBootConfig},
+    id::{VcpuId, VmId},
     log,
     runtime::El2Context,
     stage2::Stage2Vm,
-    vcpu::{Vcpu, VcpuId, runner::VcpuRunner},
-    vm::{Vm, VmId},
+    vcpu::{Vcpu, runner::VcpuRunner},
+    vm::Vm,
 };
 
 #[allow(dead_code)]

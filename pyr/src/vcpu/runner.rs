@@ -9,7 +9,8 @@ impl VcpuRunner {
         cx.install_current();
 
         let (_, vcpu) = cx.runtime_mut().split_mut();
-        vcpu.mark_running();
+        vcpu.make_runnable();
+        vcpu.enter_running();
 
         crate::log!("el1: entering guest {:?}", vcpu.id());
 

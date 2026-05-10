@@ -1,33 +1,5 @@
-use crate::{device::DeviceMap, stage2::Stage2Vm, traits::ID};
-use core::fmt;
+use crate::{device::DeviceMap, id::VmId, stage2::Stage2Vm};
 use pyr_arch::page_table::Installed;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct VmId(pub u64);
-
-impl VmId {
-    pub const fn from_raw(raw: u64) -> Self {
-        Self(raw)
-    }
-
-    pub const fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    pub fn from_parts(stage2_root_pa: u64, guest_entry: u64) -> Self {
-        Self(Self::stable_mix64(stage2_root_pa ^ guest_entry))
-    }
-}
-
-impl ID for VmId {}
-
-impl fmt::Debug for VmId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let short = (self.0 >> 32) as u32;
-
-        write!(f, "vm:{short:08x}")
-    }
-}
 
 pub struct Vm {
     id: VmId,
@@ -58,5 +30,19 @@ impl Vm {
 
     pub const fn devices(&self) -> &DeviceMap {
         &self.devices
+    }
+
+    pub fn devices_mut(&mut self) -> &mut DeviceMap {
+        &mut self.devices
+    }
+}
+
+impl core::fmt::Debug for Vm {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Vm")
+            .field("id", &self.id)
+            .field("vmid", &self.stage2.vmid())
+            .field("stage2_root", &self.stage2.root_pa())
+            .finish_non_exhaustive()
     }
 }

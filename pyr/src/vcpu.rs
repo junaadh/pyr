@@ -1,43 +1,40 @@
+use crate::{
+    guest::config::GuestConfig,
+    id::{VcpuId, VmId},
+};
 use pyr_arch::{exception::TrapFrame, platform::GuestReg};
 
-use crate::{guest::config::GuestConfig, vm::VmId};
-use core::fmt;
-
 pub mod runner;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct VcpuId {
-    vm: VmId,
-    index: u16,
-}
-
-impl VcpuId {
-    pub const fn from_parts(vm: VmId, index: u16) -> Self {
-        Self { vm, index }
-    }
-
-    pub const fn vm(self) -> VmId {
-        self.vm
-    }
-
-    pub const fn index(self) -> u16 {
-        self.index
-    }
-}
-
-impl fmt::Debug for VcpuId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let short = (self.vm.as_u64() >> 32) as u32;
-
-        write!(f, "vcpu:{short:08x}:{:04x}", self.index)
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcpuState {
     Created,
+    Runnable,
     Running,
-    Halted,
+    Blocked,
+    Halted(VcpuExitReason),
+}
+
+impl VcpuState {
+    pub const fn is_halted(self) -> bool {
+        matches!(self, Self::Halted(_))
+    }
+
+    pub const fn is_running(self) -> bool {
+        matches!(self, Self::Running)
+    }
+
+    pub const fn is_runnable(self) -> bool {
+        matches!(self, Self::Runnable)
+    }
+
+    pub const fn exit_reason(&self) -> VcpuExitReason {
+        if let VcpuState::Halted(reason) = self {
+            *reason
+        } else {
+            VcpuExitReason::None
+        }
+    }
 }
 
 pub struct Vcpu {
@@ -46,7 +43,6 @@ pub struct Vcpu {
     config: GuestConfig,
     state: VcpuState,
     traps: u64,
-    exit_reason: VcpuExitReason,
 }
 
 impl Vcpu {
@@ -57,7 +53,6 @@ impl Vcpu {
             config,
             state: VcpuState::Created,
             traps: 0,
-            exit_reason: VcpuExitReason::None,
         }
     }
 
@@ -82,24 +77,44 @@ impl Vcpu {
     }
 
     pub const fn exit_reason(&self) -> VcpuExitReason {
-        self.exit_reason
+        self.state.exit_reason()
     }
 
-    pub fn stop(&mut self, reason: VcpuExitReason) {
-        self.state = VcpuState::Halted;
-        self.exit_reason = reason;
+    pub fn make_runnable(&mut self) {
+        if matches!(self.state, VcpuState::Created | VcpuState::Blocked) {
+            self.state = VcpuState::Runnable;
+        }
+    }
+
+    pub fn enter_running(&mut self) {
+        debug_assert!(
+            matches!(self.state, VcpuState::Created | VcpuState::Runnable),
+            "invalid vCPU transition into Running from {:?}",
+            self.state
+        );
+
+        self.state = VcpuState::Running;
+    }
+
+    pub fn block(&mut self) {
+        debug_assert_eq!(self.state, VcpuState::Running);
+        self.state = VcpuState::Blocked;
+    }
+
+    pub fn halt(&mut self, reason: VcpuExitReason) {
+        self.state = VcpuState::Halted(reason);
+    }
+
+    pub const fn is_halted(&self) -> bool {
+        matches!(self.state, VcpuState::Halted(_))
+    }
+
+    pub const fn is_running(&self) -> bool {
+        matches!(self.state, VcpuState::Running)
     }
 
     pub fn record_trap(&mut self) {
         self.traps = self.traps.wrapping_add(1);
-    }
-
-    pub fn mark_running(&mut self) {
-        self.state = VcpuState::Running;
-    }
-
-    pub fn mark_halted(&mut self) {
-        self.state = VcpuState::Halted;
     }
 
     pub const fn advance_pc(&mut self, frame: &mut TrapFrame) {

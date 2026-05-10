@@ -10,11 +10,12 @@ use crate::{
     device::PlatformDeviceConfig,
     fatal,
     guest::{self, config::GuestConfig, memory::GuestMemory},
+    id::{VcpuId, VmId},
     log,
     runtime::El2Context,
     stage2::Stage2Vm,
-    vcpu::{Vcpu, VcpuId, runner::VcpuRunner},
-    vm::{Vm, VmId},
+    vcpu::{Vcpu, runner::VcpuRunner},
+    vm::Vm,
 };
 
 #[cfg(feature = "boot-tiny")]

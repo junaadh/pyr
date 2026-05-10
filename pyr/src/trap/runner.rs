@@ -21,7 +21,7 @@ impl TrapRunner {
                 vcpu.advance_pc(frame);
             }
             TrapOutcome::Exit(reason) => {
-                vcpu.stop(reason);
+                vcpu.halt(reason);
                 crate::log!(
                     "trap: vcpu.halt {:?} reason={:?} traps={}",
                     vcpu.id(),
