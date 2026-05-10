@@ -36,6 +36,8 @@ fn enable_hcr_vm() {
         .with_imo()
         .with_fmo()
         .with_vm()
+        .with_twi()
+        .with_twe()
         .msr();
 
     isb();

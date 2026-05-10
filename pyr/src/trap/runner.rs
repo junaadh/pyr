@@ -22,6 +22,18 @@ impl TrapRunner {
                 vcpu.context_mut().advance_pc();
                 vcpu.context().sync_to_trap_frame(frame);
             }
+
+            TrapOutcome::Block(reason) => {
+                vcpu.block(reason);
+                crate::log!(
+                    "trap: vcpu.block {:?} reason={reason:?} traps={}",
+                    vcpu.id(),
+                    vcpu.trap_count()
+                );
+
+                halt()
+            }
+
             TrapOutcome::Exit(reason) => {
                 vcpu.halt(reason);
                 crate::log!(

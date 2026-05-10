@@ -1,8 +1,11 @@
-use pyr_arch::{exception::ExceptionClass, sysregs::el2::EsrEl2};
+use pyr_arch::{
+    exception::{ExceptionClass, WfxKind},
+    sysregs::el2::EsrEl2,
+};
 
 use crate::{
     trap::{TrapOutcome, data_abort, hvc},
-    vcpu::{Vcpu, VcpuExitReason},
+    vcpu::{Vcpu, VcpuBlockReason, VcpuExitReason},
     vm::Vm,
 };
 
@@ -14,6 +17,13 @@ pub fn handle_trap(vm: &mut Vm, vcpu: &mut Vcpu) -> TrapOutcome {
         ExceptionClass::DataAbortLower { iss } => {
             data_abort::handle(vm, vcpu, iss)
         }
+
+        ExceptionClass::Wfx { kind } => match kind {
+            WfxKind::Wfi => {
+                TrapOutcome::Block(VcpuBlockReason::WaitForInterrupt)
+            }
+            WfxKind::Wfe => TrapOutcome::Block(VcpuBlockReason::WaitForEvent),
+        },
 
         other => {
             crate::log!(

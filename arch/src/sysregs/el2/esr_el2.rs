@@ -1,4 +1,4 @@
-use crate::exception::{DataAbortIss, ExceptionClass};
+use crate::exception::{DataAbortIss, ExceptionClass, WfxKind};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(transparent)]
@@ -41,6 +41,9 @@ impl EsrEl2 {
         let iss = self.iss();
 
         match ec {
+            0x01 => ExceptionClass::Wfx {
+                kind: WfxKind::from_iss(iss),
+            },
             0x16 => ExceptionClass::Hvc64 {
                 imm16: (iss & 0xffff) as u16,
             },
@@ -52,7 +55,6 @@ impl EsrEl2 {
             },
             0x20 => ExceptionClass::InstructionAbortLower { iss },
             0x18 => ExceptionClass::SysregTrap { iss },
-            0x01 => ExceptionClass::WfiWfe,
             _ => ExceptionClass::Unknown { ec, iss },
         }
     }

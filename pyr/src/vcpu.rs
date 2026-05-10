@@ -10,7 +10,7 @@ pub enum VcpuState {
     Created,
     Runnable,
     Running,
-    Blocked,
+    Blocked(VcpuBlockReason),
     Halted(VcpuExitReason),
 }
 
@@ -32,6 +32,14 @@ impl VcpuState {
             *reason
         } else {
             VcpuExitReason::None
+        }
+    }
+
+    pub const fn block_reason(&self) -> VcpuBlockReason {
+        if let VcpuState::Blocked(reason) = self {
+            *reason
+        } else {
+            VcpuBlockReason::None
         }
     }
 }
@@ -89,8 +97,12 @@ impl Vcpu {
         self.state.exit_reason()
     }
 
+    pub const fn block_reason(&self) -> VcpuBlockReason {
+        self.state.block_reason()
+    }
+
     pub fn make_runnable(&mut self) {
-        if matches!(self.state, VcpuState::Created | VcpuState::Blocked) {
+        if matches!(self.state, VcpuState::Created | VcpuState::Blocked(_)) {
             self.state = VcpuState::Runnable;
         }
     }
@@ -105,9 +117,9 @@ impl Vcpu {
         self.state = VcpuState::Running;
     }
 
-    pub fn block(&mut self) {
+    pub fn block(&mut self, reason: VcpuBlockReason) {
         debug_assert_eq!(self.state, VcpuState::Running);
-        self.state = VcpuState::Blocked;
+        self.state = VcpuState::Blocked(reason);
     }
 
     pub fn halt(&mut self, reason: VcpuExitReason) {
@@ -134,4 +146,11 @@ pub enum VcpuExitReason {
     UnhandledTrap,
     MmioError,
     InternalError,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VcpuBlockReason {
+    None,
+    WaitForInterrupt,
+    WaitForEvent,
 }
