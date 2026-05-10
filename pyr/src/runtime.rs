@@ -5,6 +5,7 @@ use crate::{
         scheduler::{Scheduler, SchedulerDecision},
         vm::VmRuntime,
     },
+    trap::InterruptKind,
     vcpu::Vcpu,
     vm::Vm,
 };
@@ -83,5 +84,12 @@ impl El2Context {
     pub fn on_vcpu_exited(&mut self, _vcpu_id: VcpuId) -> SchedulerDecision {
         // FIXME: later wen multiple vcpu
         self.scheduler.on_exited(self.runtime.vcpu())
+    }
+
+    pub fn on_vcpu_interrupt(
+        &mut self,
+        kind: InterruptKind,
+    ) -> SchedulerDecision {
+        self.scheduler.on_interrupt(kind)
     }
 }

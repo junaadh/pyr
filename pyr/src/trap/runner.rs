@@ -3,13 +3,13 @@ use pyr_arch::exception::TrapFrame;
 use crate::{
     fatal::halt,
     runtime::{El2Context, scheduler::SchedulerDecision},
-    trap::{TrapOutcome, dispatch},
+    trap::{TrapOutcome, dispatch, interrupt::InterruptKind},
 };
 
 pub struct TrapRunner;
 
 impl TrapRunner {
-    pub fn run(frame: &mut TrapFrame) {
+    pub fn run_sync(frame: &mut TrapFrame) {
         let cx = El2Context::current();
 
         let outcome = {
@@ -21,6 +21,40 @@ impl TrapRunner {
             dispatch::handle_trap(vm, vcpu)
         };
 
+        Self::apply_outcome(cx, frame, outcome);
+    }
+
+    pub fn run_interrupt(frame: &mut TrapFrame, kind: InterruptKind) {
+        let cx = El2Context::current();
+
+        {
+            let vcpu = cx.runtime_mut().vcpu_mut();
+            vcpu.context_mut().sync_from_trap_frame(frame);
+            vcpu.record_trap();
+        }
+
+        let decision = cx.on_vcpu_interrupt(kind);
+
+        match decision {
+            SchedulerDecision::ResumeCurrent => {
+                let vcpu = cx.runtime_mut().vcpu_mut();
+
+                if !vcpu.is_running() {
+                    vcpu.make_runnable();
+                    vcpu.enter_running();
+                }
+
+                vcpu.context().sync_to_trap_frame(frame);
+            }
+            SchedulerDecision::NoRunnableVcpu => halt(),
+        }
+    }
+
+    fn apply_outcome(
+        cx: &mut El2Context,
+        frame: &mut TrapFrame,
+        outcome: TrapOutcome,
+    ) {
         match outcome {
             TrapOutcome::Return => cx
                 .runtime_mut()

@@ -1,4 +1,4 @@
-use crate::vcpu::Vcpu;
+use crate::{trap::InterruptKind, vcpu::Vcpu};
 
 pub struct Scheduler;
 
@@ -16,6 +16,14 @@ impl Scheduler {
     pub fn on_exited(&mut self, vcpu: &Vcpu) -> SchedulerDecision {
         crate::log!("sched: exited {:?}", vcpu.id());
         SchedulerDecision::NoRunnableVcpu
+    }
+
+    pub(crate) fn on_interrupt(
+        &self,
+        kind: InterruptKind,
+    ) -> SchedulerDecision {
+        crate::log!("sched: interrupt {kind:?}");
+        SchedulerDecision::ResumeCurrent
     }
 }
 
