@@ -1,6 +1,9 @@
 use pyr_alloc::context::PyrContext;
 
-use crate::stage2::vmid::{Vmid, VmidAllocator};
+use crate::stage2::{
+    invalidate::Stage2Invalidation,
+    vmid::{AllocatedVmid, VmidAllocator},
+};
 
 pub struct HypervisorContext<'a, T> {
     pub mem: PyrContext<'a, T>,
@@ -17,7 +20,13 @@ impl<'a, A> HypervisorContext<'a, A> {
 }
 
 impl<A> HypervisorContext<'_, A> {
-    pub fn alloc_vmid(&mut self) -> Vmid {
-        self.vmids.alloc()
+    pub fn alloc_vmid(&mut self) -> AllocatedVmid {
+        let alloc = self.vmids.alloc();
+
+        if alloc.wrapped {
+            Stage2Invalidation::flush_all();
+        }
+
+        alloc
     }
 }

@@ -19,8 +19,19 @@ impl Vmid {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmidGeneration(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AllocatedVmid {
+    pub vmid: Vmid,
+    pub generation: VmidGeneration,
+    pub wrapped: bool,
+}
+
 pub struct VmidAllocator {
     next: u16,
+    generation: u64,
 }
 
 impl VmidAllocator {
@@ -28,18 +39,26 @@ impl VmidAllocator {
     pub const fn new() -> Self {
         Self {
             next: Vmid::MIN.as_u16(),
+            generation: 0,
         }
     }
 
-    pub fn alloc(&mut self) -> Vmid {
+    pub fn alloc(&mut self) -> AllocatedVmid {
         let vmid = Vmid::new(self.next);
+        let generation = VmidGeneration(self.generation);
+        let wrapped = self.next == Vmid::MAX.as_u16();
 
         self.next = if self.next == Vmid::MAX.as_u16() {
+            self.generation = self.generation.wrapping_add(1);
             Vmid::MIN.as_u16()
         } else {
             self.next + 1
         };
 
-        vmid
+        AllocatedVmid {
+            vmid,
+            generation,
+            wrapped,
+        }
     }
 }

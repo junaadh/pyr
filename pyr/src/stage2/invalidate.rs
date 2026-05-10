@@ -21,7 +21,7 @@ impl Stage2Invalidation {
         }
     }
 
-    pub fn flush_ipa(_ipa: IpaAddr) {
+    pub fn flush_ipa(_vmid: Vmid, _ipa: IpaAddr) {
         // FIXME: For now, using global stage-2 flush until
         // Pyr has VMID-aware targeted invalidation
         Self::flush_all();

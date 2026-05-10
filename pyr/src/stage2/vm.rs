@@ -1,7 +1,10 @@
 use crate::{
     context::HypervisorContext,
     guest::{memory::MapGuestRegion, region::GuestRegion},
-    stage2::{invalidate::Stage2Invalidation, vmid::Vmid},
+    stage2::{
+        invalidate::Stage2Invalidation,
+        vmid::{Vmid, VmidGeneration},
+    },
 };
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -16,6 +19,7 @@ use pyr_arch::{
 
 pub struct Stage2Vm<S> {
     vmid: Vmid,
+    vmid_generation: VmidGeneration,
     root: PhysFrame,
     child_tables: Vec<PhysFrame>,
     tables: Stage2Tables<S>,
@@ -24,6 +28,10 @@ pub struct Stage2Vm<S> {
 impl<S> Stage2Vm<S> {
     pub const fn vmid(&self) -> Vmid {
         self.vmid
+    }
+
+    pub const fn vmid_generation(&self) -> VmidGeneration {
+        self.vmid_generation
     }
 
     pub fn dump_mapping(
@@ -88,8 +96,11 @@ impl Stage2Vm<Building> {
         // `root_ptr` points to a valid zeroed PageTable frame. This Stage2Vm owns
         // `root`, so the backing memory stays alive for the lifetime of `tables`.
         let tables = unsafe { Stage2Tables::new(root_ptr) };
+
+        let alloc_vmid = cx.alloc_vmid();
         Ok(Self {
-            vmid: cx.alloc_vmid(),
+            vmid: alloc_vmid.vmid,
+            vmid_generation: alloc_vmid.generation,
             root,
             child_tables: Vec::new(),
             tables,
@@ -148,6 +159,7 @@ impl Stage2Vm<Building> {
     pub fn install(self) -> Stage2Vm<Installed> {
         let stage2 = Stage2Vm {
             vmid: self.vmid,
+            vmid_generation: self.vmid_generation,
             root: self.root,
             child_tables: self.child_tables,
             tables: self.tables.install(),
