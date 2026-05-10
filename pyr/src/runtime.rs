@@ -1,22 +1,37 @@
-use crate::{fatal, runtime::vm::VmRuntime, vcpu::Vcpu, vm::Vm};
+use crate::{
+    fatal,
+    id::VcpuId,
+    runtime::{
+        scheduler::{Scheduler, SchedulerDecision},
+        vm::VmRuntime,
+    },
+    vcpu::Vcpu,
+    vm::Vm,
+};
 use core::ptr::NonNull;
 use pyr_arch::sysregs::el2::TpidrEl2;
 
+pub mod scheduler;
 pub mod vm;
 
 pub struct El2Context {
     runtime: VmRuntime,
+    scheduler: Scheduler,
 }
 
 impl El2Context {
     pub const fn from_vm(vm: Vm, boot_vcpu: Vcpu) -> Self {
         Self {
             runtime: VmRuntime::new(vm, boot_vcpu),
+            scheduler: Scheduler::new(),
         }
     }
 
     pub const fn new(runtime: VmRuntime) -> Self {
-        Self { runtime }
+        Self {
+            runtime,
+            scheduler: Scheduler::new(),
+        }
     }
 
     pub fn install_current(&mut self) {
@@ -54,5 +69,19 @@ impl El2Context {
 
     pub const fn runtime_mut(&mut self) -> &mut VmRuntime {
         &mut self.runtime
+    }
+
+    pub const fn scheduler_mut(&mut self) -> &mut Scheduler {
+        &mut self.scheduler
+    }
+
+    pub fn on_vcpu_blocked(&mut self, _vcpu_id: VcpuId) -> SchedulerDecision {
+        // FIXME: later wen multiple vcpu
+        self.scheduler.on_blocked(self.runtime.vcpu())
+    }
+
+    pub fn on_vcpu_exited(&mut self, _vcpu_id: VcpuId) -> SchedulerDecision {
+        // FIXME: later wen multiple vcpu
+        self.scheduler.on_exited(self.runtime.vcpu())
     }
 }

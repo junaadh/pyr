@@ -21,4 +21,12 @@ impl VmRuntime {
     pub const fn vcpu(&self) -> &Vcpu {
         &self.boot_vcpu
     }
+
+    pub const fn vm_mut(&mut self) -> &mut Vm {
+        &mut self.vm
+    }
+
+    pub const fn vcpu_mut(&mut self) -> &mut Vcpu {
+        &mut self.boot_vcpu
+    }
 }
