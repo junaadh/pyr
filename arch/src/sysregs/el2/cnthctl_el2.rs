@@ -2,6 +2,11 @@
 #[repr(transparent)]
 pub struct CnthctlEl2(u64);
 
+const EL1PCTEN: u64 = 1 << 0;
+const EL1PCEN: u64 = 1 << 1;
+const EL1TVT: u64 = 1 << 13;
+const EL1TVCT: u64 = 1 << 14;
+
 impl CnthctlEl2 {
     pub const fn new(raw: u64) -> Self {
         Self(raw)
@@ -29,13 +34,63 @@ impl CnthctlEl2 {
         }
     }
 
-    /// EL1 physical counter/timer register access enable.
+    /// EL1 physical timer register access enable.
     pub const fn with_el1pcen(self) -> Self {
-        Self(self.0 | (1 << 1))
+        Self(self.0 | EL1PCEN)
+    }
+
+    /// Trap EL1 physical timer register accesses to EL2.
+    pub const fn without_el1pcen(self) -> Self {
+        Self(self.0 & !EL1PCEN)
     }
 
     /// EL1 physical counter register access enable.
     pub const fn with_el1pcten(self) -> Self {
-        Self(self.0 | (1 << 0))
+        Self(self.0 | EL1PCTEN)
+    }
+
+    /// Trap EL1 physical counter register accesses to EL2.
+    pub const fn without_el1pcten(self) -> Self {
+        Self(self.0 & !EL1PCTEN)
+    }
+
+    /// Trap EL1 virtual timer register accesses to EL2.
+    pub const fn with_el1tvt(self) -> Self {
+        Self(self.0 | EL1TVT)
+    }
+
+    /// Do not trap EL1 virtual timer register accesses to EL2.
+    pub const fn without_el1tvt(self) -> Self {
+        Self(self.0 & !EL1TVT)
+    }
+
+    /// Trap EL1 virtual counter register accesses to EL2.
+    pub const fn with_el1tvct(self) -> Self {
+        Self(self.0 | EL1TVCT)
+    }
+
+    /// Do not trap EL1 virtual counter register accesses to EL2.
+    pub const fn without_el1tvct(self) -> Self {
+        Self(self.0 & !EL1TVCT)
+    }
+
+    /// EL1 virtual timer register access enable.
+    pub const fn with_el1vten(self) -> Self {
+        self.without_el1tvt()
+    }
+
+    /// Trap EL1 virtual timer register accesses to EL2.
+    pub const fn without_el1vten(self) -> Self {
+        self.with_el1tvt()
+    }
+
+    /// EL1 virtual counter register access enable.
+    pub const fn with_el1vcten(self) -> Self {
+        self.without_el1tvct()
+    }
+
+    /// Trap EL1 virtual counter register accesses to EL2.
+    pub const fn without_el1vcten(self) -> Self {
+        self.with_el1tvct()
     }
 }

@@ -36,7 +36,6 @@ pub fn handle_trap(vm: &mut Vm, vcpu: &mut Vcpu) -> TrapOutcome {
         }
 
         ExceptionClass::SysregTrap { iss } => sysreg::handle(vm, vcpu, iss),
-
         ExceptionClass::Smc64 { imm16 } => {
             crate::log!(
                 "trap: unsupported_smc {:?} {:?}: imm={imm16:#x}",

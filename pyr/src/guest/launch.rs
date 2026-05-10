@@ -37,7 +37,14 @@ pub(crate) fn enter_el1_guest(config: GuestConfig) -> ! {
     isb();
 
     CntvoffEl2::new(0).msr();
-    CnthctlEl2::mrs().with_el1pcten().with_el1pcen().msr();
+    // Timer control/value registers are emulated; counter reads remain direct.
+    CnthctlEl2::mrs()
+        .with_el1pcten()
+        .without_el1pcen()
+        .with_el1tvt()
+        .without_el1tvct()
+        .msr();
+    isb();
 
     // SAFETY: ELR_EL2 points to guest entry, SP_EL1 is initialized, and SPSR_EL2 selects EL1h
     unsafe { eret_with_args(config) }

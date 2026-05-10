@@ -2,7 +2,6 @@ use pyr_arch::{exception::SysRegIss, reg::Gpr, sysregs::el2::CntPctEl0};
 
 use crate::{
     guest::timer::GuestTimerKind,
-    irq::InterruptSource,
     trap::TrapOutcome,
     vcpu::{Vcpu, VcpuExitReason},
     vm::Vm,
