@@ -1,12 +1,16 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
+#![allow(clippy::new_without_default)]
 
 pub mod gic;
+pub mod irq;
 pub mod pl011;
 
 use crate::pl011::Pl011;
 use pyr_arch::{addr::PhysAddr, platform::Platform};
+
+pub type InterruptController = irq::QemuGic;
 
 pub struct QemuVirt;
 

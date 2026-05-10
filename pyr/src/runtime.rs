@@ -1,11 +1,11 @@
 use crate::{
     fatal,
     id::VcpuId,
+    irq::InterruptEvent,
     runtime::{
         scheduler::{Scheduler, SchedulerDecision},
         vm::VmRuntime,
     },
-    trap::InterruptKind,
     vcpu::Vcpu,
     vm::Vm,
 };
@@ -88,8 +88,8 @@ impl El2Context {
 
     pub fn on_vcpu_interrupt(
         &mut self,
-        kind: InterruptKind,
+        event: InterruptEvent,
     ) -> SchedulerDecision {
-        self.scheduler.on_interrupt(kind)
+        self.scheduler.on_interrupt(self.runtime.vcpu_mut(), event)
     }
 }

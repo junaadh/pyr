@@ -61,7 +61,7 @@ pub fn handle(vm: &mut Vm, vcpu: &mut Vcpu, iss: DataAbortIss) -> TrapOutcome {
     let hpfar = HpfarEl2::mrs();
     let ipa = hpfar.ipa_base().as_u64() | (far.raw() & 0xfff);
 
-    match vm.devices().emulate_abort(vcpu, IpaAddr::new(ipa), iss) {
+    match vm.devices_mut().emulate_abort(vcpu, IpaAddr::new(ipa), iss) {
         Ok(()) => TrapOutcome::AdvancePc,
 
         Err(err) => {

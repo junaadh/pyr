@@ -69,7 +69,10 @@ impl MmioDevice for Pl011 {
         (Self::BASE..Self::BASE + Self::SIZE).contains(&ipa)
     }
 
-    fn emulate(access: MmioAccess) -> Result<MmioResult, MmioDeviceError> {
+    fn emulate(
+        &mut self,
+        access: MmioAccess,
+    ) -> Result<MmioResult, MmioDeviceError> {
         match access.kind {
             MmioAccessKind::Read { .. } => {
                 if let Some(value) = Self::read_id(access.offset) {

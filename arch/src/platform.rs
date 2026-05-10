@@ -47,7 +47,10 @@ impl MmioStub {
 
 pub trait MmioDevice {
     fn contains(ipa: u64) -> bool;
-    fn emulate(access: MmioAccess) -> Result<MmioResult, MmioDeviceError>;
+    fn emulate(
+        &mut self,
+        access: MmioAccess,
+    ) -> Result<MmioResult, MmioDeviceError>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -160,4 +163,12 @@ impl MmioAccessRequest {
             kind,
         })
     }
+}
+
+pub trait PhysicalInterruptController {
+    type Irq: Copy;
+
+    fn acknowledge() -> Self::Irq;
+    fn complete(irq: Self::Irq);
+    fn is_spurious(irq: Self::Irq) -> bool;
 }

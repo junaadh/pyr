@@ -64,11 +64,12 @@ pub struct DeviceRegion {
 
 pub struct DeviceMap {
     regions: Vec<DeviceRegion>,
+    gic: Gic,
 }
 
 impl DeviceMap {
     pub fn emulate_abort(
-        &self,
+        &mut self,
         vcpu: &mut Vcpu,
         ipa: IpaAddr,
         iss: DataAbortIss,
@@ -81,11 +82,12 @@ impl DeviceMap {
 
         let result = match region.kind {
             DeviceKind::Pl011 => {
-                Pl011::emulate(access).map_err(MmioError::DeviceError)?
+                let mut pl011 = Pl011;
+                pl011.emulate(access).map_err(MmioError::DeviceError)?
             }
 
             DeviceKind::GicDistributor | DeviceKind::GicCpuInterface => {
-                Gic::emulate(access).map_err(MmioError::DeviceError)?
+                self.gic.emulate(access).map_err(MmioError::DeviceError)?
             }
 
             DeviceKind::UnknownMmio => {
@@ -119,7 +121,10 @@ impl DeviceMap {
 
         debug_assert_no_overlaps(&regions);
 
-        Self { regions }
+        Self {
+            regions,
+            gic: Gic::new(),
+        }
     }
 
     fn find_region(&self, ipa: u64) -> Option<&DeviceRegion> {
@@ -135,6 +140,10 @@ impl DeviceMap {
             })
             .ok()
             .and_then(|idx| self.regions.get(idx))
+    }
+
+    pub fn inject_irq(&mut self, irq: u32) {
+        self.gic.inject_irq(irq);
     }
 }
 

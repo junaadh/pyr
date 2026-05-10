@@ -35,6 +35,10 @@ impl Vm {
     pub fn devices_mut(&mut self) -> &mut DeviceMap {
         &mut self.devices
     }
+
+    pub fn inject_irq(&mut self, irq: u32) {
+        self.devices_mut().inject_irq(irq);
+    }
 }
 
 impl core::fmt::Debug for Vm {

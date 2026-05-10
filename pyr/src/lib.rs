@@ -13,6 +13,7 @@ pub mod fatal;
 pub mod guest;
 pub mod hearth;
 pub mod id;
+pub mod irq;
 pub mod mem;
 pub mod runtime;
 pub mod stage2;

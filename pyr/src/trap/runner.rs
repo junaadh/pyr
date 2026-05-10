@@ -1,10 +1,12 @@
-use pyr_arch::exception::TrapFrame;
-
 use crate::{
     fatal::halt,
+    irq::{InterruptEvent, InterruptSource, IrqNumber},
     runtime::{El2Context, scheduler::SchedulerDecision},
     trap::{TrapOutcome, dispatch, interrupt::InterruptKind},
 };
+use pyr_arch::{exception::TrapFrame, platform::PhysicalInterruptController};
+#[cfg(feature = "platform-qemu-virt")]
+use pyr_platform_qemu::InterruptController as ActiveInterruptController;
 
 pub struct TrapRunner;
 
@@ -25,28 +27,9 @@ impl TrapRunner {
     }
 
     pub fn run_interrupt(frame: &mut TrapFrame, kind: InterruptKind) {
-        let cx = El2Context::current();
-
-        {
-            let vcpu = cx.runtime_mut().vcpu_mut();
-            vcpu.context_mut().sync_from_trap_frame(frame);
-            vcpu.record_trap();
-        }
-
-        let decision = cx.on_vcpu_interrupt(kind);
-
-        match decision {
-            SchedulerDecision::ResumeCurrent => {
-                let vcpu = cx.runtime_mut().vcpu_mut();
-
-                if !vcpu.is_running() {
-                    vcpu.make_runnable();
-                    vcpu.enter_running();
-                }
-
-                vcpu.context().sync_to_trap_frame(frame);
-            }
-            SchedulerDecision::NoRunnableVcpu => halt(),
+        match kind {
+            InterruptKind::Irq => Self::run_irq(frame),
+            InterruptKind::Fiq => Self::run_fiq(frame),
         }
     }
 
@@ -102,6 +85,71 @@ impl TrapRunner {
                     SchedulerDecision::NoRunnableVcpu => halt(),
                 }
             }
+        }
+    }
+
+    pub fn run_irq(frame: &mut TrapFrame) {
+        let cx = El2Context::current();
+
+        {
+            let vcpu = cx.runtime_mut().vcpu_mut();
+            vcpu.context_mut().sync_from_trap_frame(frame);
+            vcpu.record_trap();
+        }
+
+        let irq = ActiveInterruptController::acknowledge();
+
+        if !ActiveInterruptController::is_spurious(irq) {
+            let source = InterruptSource::from_irq(IrqNumber::new(irq.0));
+
+            if let Some(irq) = source.guest_irq() {
+                cx.runtime_mut().vm_mut().inject_irq(irq);
+            }
+
+            ActiveInterruptController::complete(irq);
+        }
+
+        let decision =
+            cx.on_vcpu_interrupt(InterruptEvent::Irq(IrqNumber::new(irq.0)));
+
+        match decision {
+            SchedulerDecision::ResumeCurrent => {
+                let vcpu = cx.runtime_mut().vcpu_mut();
+
+                if !vcpu.is_running() {
+                    vcpu.make_runnable();
+                    vcpu.enter_running();
+                }
+
+                vcpu.context().sync_to_trap_frame(frame);
+            }
+            SchedulerDecision::NoRunnableVcpu => halt(),
+        }
+    }
+
+    fn run_fiq(frame: &mut TrapFrame) {
+        let cx = El2Context::current();
+
+        {
+            let vcpu = cx.runtime_mut().vcpu_mut();
+            vcpu.context_mut().sync_from_trap_frame(frame);
+            vcpu.record_trap();
+        }
+
+        let decision = cx.on_vcpu_interrupt(InterruptEvent::Fiq);
+
+        match decision {
+            SchedulerDecision::ResumeCurrent => {
+                let vcpu = cx.runtime_mut().vcpu_mut();
+
+                if !vcpu.is_running() {
+                    vcpu.make_runnable();
+                    vcpu.enter_running();
+                }
+
+                vcpu.context().sync_to_trap_frame(frame);
+            }
+            SchedulerDecision::NoRunnableVcpu => halt(),
         }
     }
 }

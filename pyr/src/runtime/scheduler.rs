@@ -1,4 +1,7 @@
-use crate::{trap::InterruptKind, vcpu::Vcpu};
+use crate::{
+    irq::InterruptEvent,
+    vcpu::{Vcpu, VcpuBlockReason},
+};
 
 pub struct Scheduler;
 
@@ -20,9 +23,18 @@ impl Scheduler {
 
     pub(crate) fn on_interrupt(
         &self,
-        kind: InterruptKind,
+        vcpu: &mut Vcpu,
+        event: InterruptEvent,
     ) -> SchedulerDecision {
-        crate::log!("sched: interrupt {kind:?}");
+        crate::log!("sched: interrupt {event:?}");
+        if matches!(
+            vcpu.state(),
+            crate::vcpu::VcpuState::Blocked(VcpuBlockReason::WaitForInterrupt)
+        ) {
+            vcpu.make_runnable();
+            return SchedulerDecision::ResumeCurrent;
+        }
+
         SchedulerDecision::ResumeCurrent
     }
 }
