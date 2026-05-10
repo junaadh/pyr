@@ -26,17 +26,27 @@ pub enum InterruptEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InterruptSource {
     PhysicalTimer,
+    VirtualTimer,
+    Uart,
     Unknown(IrqNumber),
 }
 
 impl InterruptSource {
-    pub fn from_irq(_irq: IrqNumber) -> Self {
-        Self::PhysicalTimer
+    pub const GUEST_VTIMER_IRQ: u32 = 11;
+    pub const GUEST_PTIMER_IRQ: u32 = 13;
+
+    pub fn from_physical_irq(irq: IrqNumber) -> Self {
+        #[allow(clippy::match_single_binding)]
+        match irq.raw() {
+            _ => Self::VirtualTimer,
+        }
     }
 
     pub const fn guest_irq(self) -> Option<u32> {
         match self {
-            Self::PhysicalTimer => Some(11),
+            Self::PhysicalTimer => Some(Self::GUEST_PTIMER_IRQ),
+            Self::VirtualTimer => Some(Self::GUEST_VTIMER_IRQ),
+            Self::Uart => Some(33),
             Self::Unknown(_) => None,
         }
     }

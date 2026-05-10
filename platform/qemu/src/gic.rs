@@ -98,6 +98,10 @@ impl Gic {
         }
     }
 
+    pub fn has_pending_irq(&self) -> bool {
+        self.highest_pending().is_some()
+    }
+
     fn emulate_dist(
         &mut self,
         access: MmioAccess,

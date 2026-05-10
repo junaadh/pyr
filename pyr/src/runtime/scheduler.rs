@@ -6,7 +6,6 @@ use crate::{
 pub struct Scheduler;
 
 impl Scheduler {
-    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self
     }

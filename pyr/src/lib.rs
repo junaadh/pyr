@@ -2,6 +2,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 #![feature(alloc_error_handler)]
+#![allow(clippy::new_without_default)]
 
 extern crate alloc;
 

@@ -35,7 +35,6 @@ pub struct VmidAllocator {
 }
 
 impl VmidAllocator {
-    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self {
             next: Vmid::MIN.as_u16(),

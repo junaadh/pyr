@@ -1,10 +1,14 @@
 use crate::{
     fatal::halt,
+    guest::timer,
     irq::{InterruptEvent, InterruptSource, IrqNumber},
     runtime::{El2Context, scheduler::SchedulerDecision},
     trap::{TrapOutcome, dispatch, interrupt::InterruptKind},
 };
-use pyr_arch::{exception::TrapFrame, platform::PhysicalInterruptController};
+use pyr_arch::{
+    exception::TrapFrame, platform::PhysicalInterruptController,
+    sysregs::el2::HcrEl2,
+};
 #[cfg(feature = "platform-qemu-virt")]
 use pyr_platform_qemu::InterruptController as ActiveInterruptController;
 
@@ -39,15 +43,10 @@ impl TrapRunner {
         outcome: TrapOutcome,
     ) {
         match outcome {
-            TrapOutcome::Return => cx
-                .runtime_mut()
-                .vcpu_mut()
-                .context()
-                .sync_to_trap_frame(frame),
+            TrapOutcome::Return => prepare_guest_return(cx, frame),
             TrapOutcome::AdvancePc => {
-                let vcpu = cx.runtime_mut().vcpu_mut();
-                vcpu.context_mut().advance_pc();
-                vcpu.context().sync_to_trap_frame(frame);
+                cx.runtime_mut().vcpu_mut().context_mut().advance_pc();
+                prepare_guest_return(cx, frame);
             }
 
             TrapOutcome::Block(reason) => {
@@ -59,10 +58,12 @@ impl TrapRunner {
                 let descision = cx.on_vcpu_blocked(id);
                 match descision {
                     SchedulerDecision::ResumeCurrent => {
-                        let vcpu = cx.runtime_mut().vcpu_mut();
-                        vcpu.make_runnable();
-                        vcpu.enter_running();
-                        vcpu.context().sync_to_trap_frame(frame);
+                        {
+                            let vcpu = cx.runtime_mut().vcpu_mut();
+                            vcpu.make_runnable();
+                            vcpu.enter_running();
+                        }
+                        prepare_guest_return(cx, frame);
                     }
                     SchedulerDecision::NoRunnableVcpu => halt(),
                 }
@@ -77,10 +78,12 @@ impl TrapRunner {
                 let descision = cx.on_vcpu_exited(id);
                 match descision {
                     SchedulerDecision::ResumeCurrent => {
-                        let vcpu = cx.runtime_mut().vcpu_mut();
-                        vcpu.make_runnable();
-                        vcpu.enter_running();
-                        vcpu.context().sync_to_trap_frame(frame);
+                        {
+                            let vcpu = cx.runtime_mut().vcpu_mut();
+                            vcpu.make_runnable();
+                            vcpu.enter_running();
+                        }
+                        prepare_guest_return(cx, frame);
                     }
                     SchedulerDecision::NoRunnableVcpu => halt(),
                 }
@@ -100,7 +103,8 @@ impl TrapRunner {
         let irq = ActiveInterruptController::acknowledge();
 
         if !ActiveInterruptController::is_spurious(irq) {
-            let source = InterruptSource::from_irq(IrqNumber::new(irq.0));
+            let source =
+                InterruptSource::from_physical_irq(IrqNumber::new(irq.0));
 
             if let Some(irq) = source.guest_irq() {
                 cx.runtime_mut().vm_mut().inject_irq(irq);
@@ -121,7 +125,7 @@ impl TrapRunner {
                     vcpu.enter_running();
                 }
 
-                vcpu.context().sync_to_trap_frame(frame);
+                prepare_guest_return(cx, frame);
             }
             SchedulerDecision::NoRunnableVcpu => halt(),
         }
@@ -147,9 +151,29 @@ impl TrapRunner {
                     vcpu.enter_running();
                 }
 
-                vcpu.context().sync_to_trap_frame(frame);
+                prepare_guest_return(cx, frame);
             }
             SchedulerDecision::NoRunnableVcpu => halt(),
         }
     }
+}
+
+fn prepare_guest_return(cx: &mut El2Context, frame: &mut TrapFrame) {
+    {
+        let (vm, vcpu) = cx.runtime_mut().split_mut();
+        timer::evaluate_guest_timers(vm, vcpu);
+    }
+
+    let pending_irq = cx.runtime().vm().devices().has_pending_irq();
+
+    if pending_irq {
+        HcrEl2::mrs().with_vi().msr();
+    } else {
+        HcrEl2::mrs().without_vi().msr();
+    }
+
+    cx.runtime_mut()
+        .vcpu_mut()
+        .context()
+        .sync_to_trap_frame(frame);
 }

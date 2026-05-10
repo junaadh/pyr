@@ -145,6 +145,10 @@ impl DeviceMap {
     pub fn inject_irq(&mut self, irq: u32) {
         self.gic.inject_irq(irq);
     }
+
+    pub fn has_pending_irq(&self) -> bool {
+        self.gic.has_pending_irq()
+    }
 }
 
 fn debug_assert_no_overlaps(regions: &[DeviceRegion]) {

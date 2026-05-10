@@ -1,4 +1,4 @@
-use crate::exception::{DataAbortIss, ExceptionClass, WfxKind};
+use crate::exception::{DataAbortIss, ExceptionClass, SysRegIss, WfxKind};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(transparent)]
@@ -54,7 +54,9 @@ impl EsrEl2 {
                 iss: DataAbortIss::decode(iss),
             },
             0x20 => ExceptionClass::InstructionAbortLower { iss },
-            0x18 => ExceptionClass::SysregTrap { iss },
+            0x18 => ExceptionClass::SysregTrap {
+                iss: SysRegIss::decode(iss),
+            },
             _ => ExceptionClass::Unknown { ec, iss },
         }
     }

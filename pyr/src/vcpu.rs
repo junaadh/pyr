@@ -1,5 +1,5 @@
 use crate::{
-    guest::{config::GuestConfig, context::GuestContext},
+    guest::{config::GuestConfig, context::GuestContext, timer::GuestTimers},
     id::{VcpuId, VmId},
 };
 
@@ -51,6 +51,7 @@ pub struct Vcpu {
     context: GuestContext,
     state: VcpuState,
     traps: u64,
+    timers: GuestTimers,
 }
 
 impl Vcpu {
@@ -62,6 +63,7 @@ impl Vcpu {
             context: GuestContext::from_config(config),
             state: VcpuState::Created,
             traps: 0,
+            timers: GuestTimers::new(),
         }
     }
 
@@ -91,6 +93,14 @@ impl Vcpu {
 
     pub const fn trap_count(&self) -> u64 {
         self.traps
+    }
+
+    pub const fn timers(&self) -> &GuestTimers {
+        &self.timers
+    }
+
+    pub fn timers_mut(&mut self) -> &mut GuestTimers {
+        &mut self.timers
     }
 
     pub const fn exit_reason(&self) -> VcpuExitReason {
@@ -146,6 +156,8 @@ pub enum VcpuExitReason {
     UnhandledTrap,
     MmioError,
     InternalError,
+    InstructionAbort,
+    UnknownSysReg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -19,7 +19,6 @@ pub struct LockedBumpHeap {
 }
 
 impl LockedBumpHeap {
-    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self {
             inner: SpinLock::new(BumpHeap::uninit()),

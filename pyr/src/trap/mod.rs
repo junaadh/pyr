@@ -5,6 +5,7 @@ mod interrupt;
 mod outcome;
 mod psci;
 mod runner;
+mod sysreg;
 
 pub use interrupt::*;
 pub use outcome::*;

@@ -85,4 +85,12 @@ impl HcrEl2 {
     pub const fn with_fmo(self) -> Self {
         Self(self.0 | (1 << 3))
     }
+
+    pub const fn with_vi(self) -> Self {
+        Self(self.0 | (1 << 7))
+    }
+
+    pub const fn without_vi(self) -> Self {
+        Self(self.0 & !(1 << 7))
+    }
 }
